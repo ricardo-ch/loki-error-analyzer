@@ -143,7 +143,7 @@ class LLMErrorEnhancer:
                     "model": self.model,
                     "prompt": "Hello",
                     "stream": False
-                }, timeout=30)  # Increased timeout
+                }, timeout=self.llm_timeout)  # Use configurable timeout
             return response.status_code == 200
         except Exception as e:
             print(f"❌ LLM connection failed: {e}")
