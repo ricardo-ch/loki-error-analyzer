@@ -18,6 +18,7 @@ Before running the analyzer, ensure you have the following installed:
 2. **kubectl** - Required for connecting to Kubernetes clusters
 3. **logcli** - Grafana Loki command-line interface
    - Install from: https://grafana.com/docs/loki/latest/clients/logcli/
+   - Configuration guide: [Loki LogCLI Configuration](https://www.notion.so/smgnet/Loki-4b4569ef1fa14918980fbffbbd479708)
 4. **PyYAML** - Python YAML library
    - Install with: `pip3 install -r requirements.txt`
 
