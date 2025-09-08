@@ -105,10 +105,13 @@ python3 llm_error_enhancer.py prod_log.json
 
 **AI Features:**
 - 🤖 **Root Cause Analysis**: Identifies likely causes of errors
-- 📊 **Impact Assessment**: Evaluates business impact
-- 🎯 **Actionable Recommendations**: Specific remediation steps
-- 📈 **Service Priority Ranking**: Which services need immediate attention
-- 📝 **Executive Summaries**: Business-friendly language
+- 📊 **Detailed End-User Impact Analysis**: Comprehensive business impact assessment for top 3 error services
+- 💰 **Financial Impact Assessment**: Revenue loss, cost implications, and business metrics
+- 🎯 **Severity Classification**: Critical, High, Medium, Low impact levels
+- ⚡ **Immediate Actions**: Emergency fixes and urgent remediation steps
+- 📈 **Long-term Recommendations**: Strategic improvements and process enhancements
+- 💬 **Communication Strategies**: User notification and stakeholder communication plans
+- 🔍 **Service-Specific Intelligence**: Pre-built impact templates for key services
 
 ## Output Files
 
@@ -117,7 +120,16 @@ The analyzer generates the following files:
 - `log.json` - Raw error logs from Loki
 - `LOKI_ERROR_ANALYSIS_REPORT_DEV.md` - Analysis report for dev environment
 - `LOKI_ERROR_ANALYSIS_REPORT_PROD.md` - Analysis report for prod environment
-- `enhanced_analysis_YYYYMMDD_HHMMSS.md` - AI-enhanced analysis report (when using LLM enhancer)
+- `enhanced_analysis_YYYYMMDD_HHMMSS.md` - **AI-enhanced analysis with detailed end-user impact analysis**
+
+### **Enhanced Analysis Report Features:**
+- **🤖 AI-Powered Analysis**: LLM-generated insights and recommendations
+- **🚨 Top 3 Services Impact Analysis**: Detailed business impact for highest error services
+- **💰 Financial Impact Assessment**: Revenue loss, cost implications, business metrics
+- **🎯 Severity Classification**: Critical, High, Medium, Low with business justification
+- **⚡ Actionable Recommendations**: Immediate fixes and long-term strategic improvements
+- **💬 Communication Strategies**: User notification and stakeholder communication plans
+- **📊 Executive Summary**: CTO/executive-ready insights and decision support
 
 ## Configuration
 
@@ -188,6 +200,65 @@ python3 llm_error_enhancer.py prod_log.json
 open enhanced_analysis_*.md
 ```
 
+## 🚨 Detailed End-User Impact Analysis
+
+The enhanced LLM analyzer automatically generates comprehensive business impact analysis for the **top 3 error services** in every run. This provides executive-ready insights that go beyond technical error counts.
+
+### **📊 What You Get:**
+
+#### **For Each Top Service:**
+- **Scale of Impact**: Error counts, rates, affected pods, percentage of system errors
+- **Root Cause Analysis**: Technical root cause and error distribution patterns
+- **Business Impact Assessment**: Direct and indirect user impact analysis
+- **Severity Classification**: Critical, High, Medium, Low with business justification
+- **Immediate Actions**: Emergency fixes, data investigation, financial reconciliation
+- **Long-term Recommendations**: Strategic improvements and process enhancements
+- **Communication Strategy**: User notification timelines and stakeholder communication
+
+#### **Service-Specific Intelligence:**
+- **`boost-fee-worker`**: Boost fee refund processing failures and financial impact
+- **`frontend-mobile-api-v2`**: Mobile app functionality disruptions and user engagement
+- **`imaginary-wrapper`**: Image processing failures and listing quality impact
+- **Default templates**: For any other services with generic impact analysis
+
+### **Example Analysis Output:**
+```markdown
+## 🚨 End User Impact Analysis: boost-fee-worker
+
+### **📊 Scale of Impact**
+- **Total Errors:** 7,317 (12.8% of all system errors)
+- **Critical Errors:** 0 (0.0% of service errors)
+- **Error Rate:** ~2.0 errors per hour
+- **Affected Pods:** 4 pods
+
+### **🔍 Root Cause Analysis**
+**Primary Error:** Error handler threw an exception
+**Error Distribution:** NullPointerException in boost fee refund processing
+
+### **💰 Business Impact Assessment**
+#### **Direct User Impact:**
+1. **🔴 Boost Fee Refunds Not Processed**
+   - Users who paid for listing boosts may not receive refunds
+   - Affects seller experience and platform trust
+   - **Financial impact**: Direct revenue loss from unprocessed refunds
+
+### **🎯 Severity Classification**
+**🔴 CRITICAL** - Business Critical - Immediate action required
+
+### **⚡ Immediate Actions Required**
+1. **🔧 Emergency Fix**
+   - Add null checks for getConsentTime() in ListingServiceAdapter
+   - Implement fallback logic for missing consent data
+   - Deploy hotfix immediately
+```
+
+### **🎯 Business Value:**
+- **Executive Ready**: Provides CTO/executive-level insights immediately
+- **Actionable**: Specific steps for immediate and long-term remediation
+- **Financial Focus**: Quantifies business impact and revenue implications
+- **User-Centric**: Focuses on actual end-user experience and impact
+- **Communication Ready**: Includes stakeholder communication strategies
+
 ### Using Shell Scripts
 ```bash
 # Basic analysis
@@ -204,3 +275,25 @@ For technical questions or issues, contact the DevOps team.
 ### Additional Resources
 - **LLM Setup Guide**: See `LLM_SETUP.md` for detailed AI enhancement setup
 - **LogCLI Configuration**: [Loki LogCLI Configuration](https://www.notion.so/smgnet/Loki-4b4569ef1fa14918980fbffbbd479708)
+
+## 🚀 Quick Reference
+
+### **New in Enhanced Analysis:**
+- **Automatic Top 3 Analysis**: Detailed end-user impact for highest error services
+- **Business Impact Focus**: Financial, user experience, and operational impact assessment
+- **Executive-Ready Reports**: CTO/executive-level insights and decision support
+- **Service-Specific Intelligence**: Pre-built templates for key services
+- **Communication Strategies**: User notification and stakeholder communication plans
+
+### **One-Command Analysis:**
+```bash
+# Complete analysis with AI enhancement
+python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_log.json
+```
+
+### **Key Benefits:**
+- **🎯 Actionable**: Specific immediate and long-term recommendations
+- **💰 Business-Focused**: Financial impact and revenue implications
+- **📊 Data-Driven**: Uses actual error metrics for severity classification
+- **🔄 Automated**: No manual intervention required
+- **💬 Communication-Ready**: Includes stakeholder communication strategies
