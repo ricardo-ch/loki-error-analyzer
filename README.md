@@ -98,6 +98,9 @@ python3 llm_error_enhancer.py prod_log.json --output enhanced_report.md
 # With different AI model
 python3 llm_error_enhancer.py prod_log.json --model mistral:7b
 
+# With large model and extended timeout (for 70B models)
+python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
+
 # Complete workflow: Loki analysis + AI enhancement
 python3 loki_error_analyzer.py --env prod
 python3 llm_error_enhancer.py prod_log.json
@@ -112,6 +115,7 @@ python3 llm_error_enhancer.py prod_log.json
 - 📈 **Long-term Recommendations**: Strategic improvements and process enhancements
 - 💬 **Communication Strategies**: User notification and stakeholder communication plans
 - 🔍 **Service-Specific Intelligence**: Pre-built impact templates for key services
+- ⏱️ **Configurable Timeouts**: Support for large models (70B) with extended processing time
 
 ## Output Files
 
@@ -289,6 +293,9 @@ For technical questions or issues, contact the DevOps team.
 ```bash
 # Complete analysis with AI enhancement
 python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_log.json
+
+# With large model and extended timeout
+python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
 ```
 
 ### **Key Benefits:**
@@ -297,3 +304,26 @@ python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_
 - **📊 Data-Driven**: Uses actual error metrics for severity classification
 - **🔄 Automated**: No manual intervention required
 - **💬 Communication-Ready**: Includes stakeholder communication strategies
+
+## ⏱️ Timeout Configuration
+
+For different LLM models, use appropriate timeout values:
+
+| Model | Recommended Timeout | Command Example |
+|-------|-------------------|-----------------|
+| **llama3.1:8b** | 120-300s | `--timeout 300` |
+| **llama3.1:70b-q4_K_M** | 600-900s | `--timeout 600` |
+| **mistral:7b** | 300-600s | `--timeout 300` |
+| **qwen2.5:7b** | 300-600s | `--timeout 300` |
+
+### **Examples:**
+```bash
+# Fast model (8B)
+python3 llm_error_enhancer.py prod_log.json --model llama3.1:8b --timeout 300
+
+# Large model (70B) - needs more time
+python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
+
+# If 70B still times out, try longer timeout
+python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 900
+```

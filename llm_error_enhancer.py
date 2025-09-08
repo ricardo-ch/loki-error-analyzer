@@ -18,10 +18,12 @@ from typing import Dict, List, Any, Optional
 import yaml
 
 class LLMErrorEnhancer:
-    def __init__(self, llm_endpoint: str = "http://localhost:11434", model: str = "llama3.1:8b", auto_manage_ollama: bool = True):
+    def __init__(self, llm_endpoint: str = "http://localhost:11434", model: str = "llama3.1:8b", 
+                 auto_manage_ollama: bool = True, llm_timeout: int = 300):
         """Initialize the LLM enhancer with local LLM configuration."""
         self.llm_endpoint = llm_endpoint
         self.model = model
+        self.llm_timeout = llm_timeout  # Timeout in seconds for LLM requests
         self.enhanced_insights = {}
         self.auto_manage_ollama = auto_manage_ollama
         self.ollama_process = None
@@ -369,7 +371,7 @@ class LLMErrorEnhancer:
                         "temperature": 0.3,  # Lower temperature for more focused analysis
                         "top_p": 0.9
                     }
-                }, timeout=120)  # Increased timeout for analysis
+                }, timeout=self.llm_timeout)  # Configurable timeout for analysis
             
             if response.status_code == 200:
                 return {
@@ -877,7 +879,8 @@ def main():
 Examples:
   python3 llm_error_enhancer.py prod_log.json
   python3 llm_error_enhancer.py prod_log.json --output enhanced_report.md
-  python3 llm_error_enhancer.py prod_log.json --model llama3.1:8b --endpoint http://localhost:11434
+  python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
+  python3 llm_error_enhancer.py prod_log.json --model mistral:7b --timeout 300
   python3 llm_error_enhancer.py prod_log.json --no-auto-ollama  # Don't manage Ollama automatically
         """
     )
@@ -910,6 +913,13 @@ Examples:
         help='Disable automatic Ollama management (assume Ollama is already running)'
     )
     
+    parser.add_argument(
+        '--timeout', '-t',
+        type=int,
+        default=300,
+        help='LLM request timeout in seconds (default: 300 for 70B models)'
+    )
+    
     args = parser.parse_args()
     
     # Check if input file exists
@@ -921,7 +931,8 @@ Examples:
     enhancer = LLMErrorEnhancer(
         llm_endpoint=args.endpoint,
         model=args.model,
-        auto_manage_ollama=not args.no_auto_ollama
+        auto_manage_ollama=not args.no_auto_ollama,
+        llm_timeout=args.timeout
     )
     
     # Set up signal handlers for graceful shutdown
