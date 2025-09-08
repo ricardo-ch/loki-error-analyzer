@@ -4,6 +4,7 @@
 
 # Generated reports
 *LOKI_ERROR_ANALYSIS_REPORT*.md
+*enhanced_analysis_*.md
 
 # Environment-specific files
 *_log.json

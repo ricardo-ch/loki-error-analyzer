@@ -139,28 +139,51 @@ class LLMErrorEnhancer:
             response = requests.post(f"{self.llm_endpoint}/api/generate", 
                 json={
                     "model": self.model,
-                    "prompt": "Hello, are you working?",
+                    "prompt": "Hello",
                     "stream": False
-                }, timeout=10)
+                }, timeout=30)  # Increased timeout
             return response.status_code == 200
         except Exception as e:
             print(f"❌ LLM connection failed: {e}")
             return False
     
     def load_error_data(self, input_file: str) -> List[Dict]:
-        """Load error data from JSON file."""
+        """Load error data from JSON or JSONL file."""
         try:
             with open(input_file, 'r') as f:
-                if input_file.endswith('.jsonl'):
-                    # Handle JSONL format
+                # Try to detect format by reading first line
+                first_line = f.readline().strip()
+                f.seek(0)  # Reset file pointer
+                
+                if first_line.startswith('{') and not first_line.startswith('[{'):
+                    # JSONL format - each line is a JSON object
                     data = []
                     for line in f:
-                        if line.strip():
-                            data.append(json.loads(line))
+                        line = line.strip()
+                        if line:
+                            try:
+                                data.append(json.loads(line))
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️  Skipping invalid JSON line: {e}")
+                                continue
                     return data
                 else:
-                    # Handle regular JSON format
-                    return json.load(f)
+                    # Try regular JSON format
+                    try:
+                        return json.load(f)
+                    except json.JSONDecodeError:
+                        # If regular JSON fails, try JSONL format
+                        f.seek(0)
+                        data = []
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                try:
+                                    data.append(json.loads(line))
+                                except json.JSONDecodeError as e:
+                                    print(f"⚠️  Skipping invalid JSON line: {e}")
+                                    continue
+                        return data
         except Exception as e:
             print(f"❌ Error loading data from {input_file}: {e}")
             return []
@@ -265,7 +288,7 @@ class LLMErrorEnhancer:
                         "temperature": 0.3,  # Lower temperature for more focused analysis
                         "top_p": 0.9
                     }
-                }, timeout=60)
+                }, timeout=120)  # Increased timeout for analysis
             
             if response.status_code == 200:
                 return {
