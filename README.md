@@ -6,8 +6,10 @@ This folder contains all the files needed to run the Loki Error Analyzer indepen
 
 - `run_analyzer.sh` - Main script to run the analyzer
 - `loki_error_analyzer.py` - Python script that performs the analysis
+- `llm_error_enhancer.py` - AI-powered error analysis enhancer
 - `config.yaml` - Configuration file for the analyzer
 - `requirements.txt` - Python dependencies
+- `LLM_SETUP.md` - LLM enhancer setup guide
 - `README.md` - This documentation file
 
 ## Prerequisites
@@ -21,6 +23,9 @@ Before running the analyzer, ensure you have the following installed:
    - Configuration guide: [Loki LogCLI Configuration](https://www.notion.so/smgnet/Loki-4b4569ef1fa14918980fbffbbd479708)
 4. **PyYAML** - Python YAML library
    - Install with: `pip3 install -r requirements.txt`
+5. **Ollama** (Optional) - For AI-powered analysis enhancement
+   - Install with: `brew install ollama`
+   - See `LLM_SETUP.md` for detailed setup
 
 ## Installation
 
@@ -32,6 +37,11 @@ Before running the analyzer, ensure you have the following installed:
 2. Ensure kubectl is configured with access to the target Kubernetes cluster
 
 3. Install logcli following the official documentation
+
+4. (Optional) Install Ollama for AI-powered analysis:
+   ```bash
+   brew install ollama
+   ```
 
 ## Usage
 
@@ -74,6 +84,32 @@ Before running the analyzer, ensure you have the following installed:
 ./run_analyzer.sh -e prod -c
 ```
 
+### AI-Powered Analysis (Optional)
+
+Enhance your error analysis with AI insights:
+
+```bash
+# Basic AI enhancement (Ollama starts/stops automatically)
+python3 llm_error_enhancer.py prod_log.json
+
+# With custom output file
+python3 llm_error_enhancer.py prod_log.json --output enhanced_report.md
+
+# With different AI model
+python3 llm_error_enhancer.py prod_log.json --model mistral:7b
+
+# Complete workflow: Loki analysis + AI enhancement
+python3 loki_error_analyzer.py --env prod
+python3 llm_error_enhancer.py prod_log.json
+```
+
+**AI Features:**
+- 🤖 **Root Cause Analysis**: Identifies likely causes of errors
+- 📊 **Impact Assessment**: Evaluates business impact
+- 🎯 **Actionable Recommendations**: Specific remediation steps
+- 📈 **Service Priority Ranking**: Which services need immediate attention
+- 📝 **Executive Summaries**: Business-friendly language
+
 ## Output Files
 
 The analyzer generates the following files:
@@ -81,6 +117,7 @@ The analyzer generates the following files:
 - `log.json` - Raw error logs from Loki
 - `LOKI_ERROR_ANALYSIS_REPORT_DEV.md` - Analysis report for dev environment
 - `LOKI_ERROR_ANALYSIS_REPORT_PROD.md` - Analysis report for prod environment
+- `enhanced_analysis_YYYYMMDD_HHMMSS.md` - AI-enhanced analysis report (when using LLM enhancer)
 
 ## Configuration
 
@@ -128,6 +165,42 @@ pkill -f "kubectl port-forward"
 - Analyzes yesterday 19:00-22:00 time window
 - Generates `LOKI_ERROR_ANALYSIS_REPORT_PROD.md`
 
+## Complete Workflow
+
+### Basic Analysis
+```bash
+# 1. Run Loki error analysis
+python3 loki_error_analyzer.py --env prod
+
+# 2. View the report
+open prod_LOKI_ERROR_ANALYSIS_REPORT.md
+```
+
+### AI-Enhanced Analysis
+```bash
+# 1. Run Loki error analysis
+python3 loki_error_analyzer.py --env prod
+
+# 2. Enhance with AI insights (Ollama auto-starts/stops)
+python3 llm_error_enhancer.py prod_log.json
+
+# 3. View the enhanced report
+open enhanced_analysis_*.md
+```
+
+### Using Shell Scripts
+```bash
+# Basic analysis
+./run_analyzer.sh -e prod
+
+# Then enhance with AI
+python3 llm_error_enhancer.py prod_log.json
+```
+
 ## Support
 
 For technical questions or issues, contact the DevOps team.
+
+### Additional Resources
+- **LLM Setup Guide**: See `LLM_SETUP.md` for detailed AI enhancement setup
+- **LogCLI Configuration**: [Loki LogCLI Configuration](https://www.notion.so/smgnet/Loki-4b4569ef1fa14918980fbffbbd479708)
