@@ -224,7 +224,7 @@ class LLMErrorEnhancer:
                     patterns['error_types'][level] = 0
                 patterns['error_types'][level] += 1
                 
-                if message:
+                if message and isinstance(message, str):
                     patterns['top_error_messages'].append({
                         'message': message[:200],  # Truncate for analysis
                         'app': app,
@@ -234,7 +234,7 @@ class LLMErrorEnhancer:
                 # Identify critical errors
                 critical_keywords = ['timeout', 'connection refused', 'connection failed', 
                                    'eofexception', '503', '502', '500', 'fatal', 'critical']
-                if any(keyword in message.lower() for keyword in critical_keywords):
+                if message and isinstance(message, str) and any(keyword in message.lower() for keyword in critical_keywords):
                     patterns['critical_errors'].append({
                         'app': app,
                         'message': message[:100],
