@@ -340,6 +340,10 @@ class LLMErrorEnhancer:
         
         # Prepare context for LLM
         context = f"""
+        You are an experienced IT expert and systems analyst with deep expertise in production system troubleshooting, error analysis, and incident response. Your role is to provide factual, evidence-based analysis of system errors.
+
+        IMPORTANT: Base your analysis strictly on the provided data and facts. Do not make assumptions or speculate beyond what can be directly observed from the error logs. If information is missing or unclear, explicitly state this rather than making assumptions.
+
         Analyze these error logs from a production system and provide insights:
         
         Total Errors: {error_patterns['total_errors']}
@@ -353,12 +357,14 @@ class LLMErrorEnhancer:
         Critical Errors:
         {json.dumps(error_patterns['critical_errors'], indent=2)}
         
-        Please provide:
-        1. Root Cause Analysis
-        2. Impact Assessment
-        3. Immediate Actions Required
-        4. Long-term Recommendations
-        5. Service Priority Ranking
+        As an IT expert, please provide:
+        1. Root Cause Analysis (based on observable error patterns and evidence)
+        2. Impact Assessment (factual assessment of what can be determined from the logs)
+        3. Immediate Actions Required (specific, actionable steps based on the evidence)
+        4. Long-term Recommendations (strategic improvements based on observed patterns)
+        5. Service Priority Ranking (prioritized based on error volume and criticality)
+        
+        Remember: Stick to facts, avoid speculation, and clearly indicate when information is insufficient for a complete analysis.
         """
         
         try:
