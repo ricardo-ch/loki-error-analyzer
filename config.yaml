@@ -65,10 +65,24 @@ analysis:
   top_issues_count: 3
   
   # Number of top applications to show in breakdown
-  top_apps_count: 10
+  top_apps_count: 3
   
   # Enable debug mode
   debug: false
+  
+  # Minimum error thresholds for analysis
+  thresholds:
+    # Minimum occurrences for an error to be considered significant
+    min_error_occurrences: 10
+    
+    # Minimum occurrences for critical errors to be included
+    min_critical_error_occurrences: 10
+    
+    # Minimum total errors for a service to be included in analysis
+    min_service_errors: 10
+    
+    # Minimum percentage of total errors for a service to be considered high-impact
+    min_service_error_percentage: 0.3
 
 # Error Categories
 # Customize error categorization patterns
