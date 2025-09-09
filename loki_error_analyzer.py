@@ -580,9 +580,13 @@ class LokiErrorAnalyzer:
                 service_query = f'{{stream="stdout", app="{service}"}} |~ "error"'
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, service_query, time_range, org_id)
                 
+                # Generate both URL formats
+                simple_url = self._build_simple_grafana_url(base_url, datasource_uid, service_query, time_range, org_id)
+                
                 queries.append(f"#### {i}. {service} ({metrics['total_errors']:,} errors)")
                 queries.append(f"**Loki Query:** `{service_query}`")
-                queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                queries.append(f"**Grafana Link (Complex):** [Open in Grafana]({grafana_url})")
+                queries.append(f"**Grafana Link (Simple):** [Open in Grafana]({simple_url})")
                 queries.append("")
                 
                 # Add critical errors for this service
@@ -590,8 +594,11 @@ class LokiErrorAnalyzer:
                     critical_query = f'{{stream="stdout", app="{service}"}} |~ "(timeout|connection refused|connection failed|eofexception|503|502|500)"'
                     critical_url = self._build_grafana_url(base_url, datasource_uid, critical_query, time_range, org_id)
                     
+                    critical_simple_url = self._build_simple_grafana_url(base_url, datasource_uid, critical_query, time_range, org_id)
+                    
                     queries.append(f"**Critical Errors Query:** `{critical_query}`")
-                    queries.append(f"**Critical Errors Link:** [Open in Grafana]({critical_url})")
+                    queries.append(f"**Critical Errors Link (Complex):** [Open in Grafana]({critical_url})")
+                    queries.append(f"**Critical Errors Link (Simple):** [Open in Grafana]({critical_simple_url})")
                     queries.append("")
         
         # 2. Critical errors across all services
@@ -722,14 +729,60 @@ class LokiErrorAnalyzer:
         from_time_ms = int(datetime.fromisoformat(from_time.replace('Z', '+00:00')).timestamp() * 1000)
         to_time_ms = int(datetime.fromisoformat(to_time.replace('Z', '+00:00')).timestamp() * 1000)
         
+        # Build the JSON structure for the URL
+        import json
+        import urllib.parse
+        
+        # Create the query structure
+        query_structure = {
+            "52i": {
+                "datasource": datasource_uid,
+                "queries": [
+                    {
+                        "datasource": {
+                            "type": "loki",
+                            "uid": datasource_uid
+                        },
+                        "editorMode": "code",
+                        "expr": query,
+                        "queryType": "range",
+                        "refId": "A",
+                        "direction": "backward"
+                    }
+                ],
+                "range": {
+                    "from": str(from_time_ms),
+                    "to": str(to_time_ms)
+                }
+            }
+        }
+        
+        # Convert to JSON and URL encode
+        query_json = json.dumps(query_structure)
+        encoded_panes = urllib.parse.quote(query_json)
+        
+        # Build the final URL
+        url = f"{base_url}?schemaVersion=1&panes={encoded_panes}&orgId={org_id}"
+        
+        return url
+    
+    def _build_simple_grafana_url(self, base_url, datasource_uid, query, time_range, org_id=1):
+        """Build a simpler Grafana URL as fallback."""
+        from_time, to_time = time_range
+        
+        # Convert time to milliseconds
+        from datetime import datetime
+        from_time_ms = int(datetime.fromisoformat(from_time.replace('Z', '+00:00')).timestamp() * 1000)
+        to_time_ms = int(datetime.fromisoformat(to_time.replace('Z', '+00:00')).timestamp() * 1000)
+        
         # URL encode the query
         import urllib.parse
         encoded_query = urllib.parse.quote(query)
         
-        # Build the URL structure based on your Grafana URL pattern
-        url = f"{base_url}?schemaVersion=1&panes=%7B%2252i%22:%7B%22datasource%22:%22{datasource_uid}%22,%22queries%22:%5B%7B%22datasource%22:%7B%22type%22:%22loki%22,%22uid%22:%22{datasource_uid}%22%7D,%22editorMode%22:%22code%22,%22expr%22:%22{encoded_query}%22,%22queryType%22:%22range%22,%22refId%22:%22A%22,%22direction%22:%22backward%22%7D%5D,%22range%22:%7B%22from%22:%22{from_time_ms}%22,%22to%22:%22{to_time_ms}%22%7D%7D%7D&orgId={org_id}"
+        # Simple URL format
+        simple_url = f"{base_url}?datasource={datasource_uid}&query={encoded_query}&from={from_time_ms}&to={to_time_ms}&orgId={org_id}"
         
-        return url
+        return simple_url
     
     def _categorize_critical_error(self, message):
         """Categorize critical error message."""
@@ -808,6 +861,12 @@ This analysis focuses on significant errors and excludes low-frequency issues:
 ## 🔍 Root Cause Investigation Queries
 
 Use these Loki queries in Grafana for deeper investigation:
+
+**Note:** If the Grafana links don't work due to URL parsing issues, you can manually:
+1. Go to [Grafana Explore](https://grafana.ricardo.engineering/explore)
+2. Select the Loki datasource (`PD805B64DBD608BC9`)
+3. Copy and paste the Loki queries below
+4. Set the time range to match your analysis period
 
 {loki_queries}
 
