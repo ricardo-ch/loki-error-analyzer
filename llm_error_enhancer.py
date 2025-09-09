@@ -46,6 +46,63 @@ class LLMErrorEnhancer:
         except:
             return False
     
+    def extract_loki_queries_from_report(self, report_file: str) -> str:
+        """Extract Loki queries section from the original analysis report."""
+        try:
+            # Try to find the report file
+            if not os.path.exists(report_file):
+                # Try common report file names
+                possible_files = [
+                    report_file,
+                    report_file.replace('.md', '_LOKI_ERROR_ANALYSIS_REPORT.md'),
+                    'LOKI_ERROR_ANALYSIS_REPORT.md',
+                    'prod_LOKI_ERROR_ANALYSIS_REPORT.md',
+                    'dev_LOKI_ERROR_ANALYSIS_REPORT.md'
+                ]
+                
+                for file_path in possible_files:
+                    if os.path.exists(file_path):
+                        report_file = file_path
+                        break
+                else:
+                    return ""
+            
+            with open(report_file, 'r') as f:
+                content = f.read()
+            
+            # Extract the Root Cause Investigation Queries section
+            start_marker = "## 🔍 Root Cause Investigation Queries"
+            
+            start_idx = content.find(start_marker)
+            if start_idx == -1:
+                return ""
+            
+            # Find the end of the section - look for the next major section
+            # Try different end markers in order of preference
+            end_markers = [
+                "\n## 🚨 Critical Issues",
+                "\n## 📊 Original Analysis Summary", 
+                "\n## 🔍 Service Health Overview",
+                "\n## 📈 Recommendations",
+                "\n## ",
+                "\n---"
+            ]
+            
+            end_idx = len(content)  # Default to end of file
+            for marker in end_markers:
+                found_idx = content.find(marker, start_idx + len(start_marker))
+                if found_idx != -1 and found_idx < end_idx:
+                    end_idx = found_idx
+            
+            # Extract the section
+            queries_section = content[start_idx:end_idx].strip()
+            
+            return queries_section
+            
+        except Exception as e:
+            print(f"⚠️  Could not extract Loki queries from report: {e}")
+            return ""
+    
     def start_ollama(self) -> bool:
         """Start Ollama service if not already running."""
         if not self.auto_manage_ollama:
@@ -714,6 +771,27 @@ class LLMErrorEnhancer:
                 report_content += f"- **Critical Errors:** {metrics.get('critical_errors', 0)}\n"
                 report_content += f"- **Affected Pods:** {metrics.get('unique_pods', 0)}\n\n"
         
+        # Add Loki queries section if available in original analysis
+        if 'loki_queries' in original_analysis:
+            # Remove the header from the extracted queries since we're adding our own
+            queries_content = original_analysis['loki_queries']
+            if queries_content.startswith("## 🔍 Root Cause Investigation Queries"):
+                # Find the first newline after the header and take everything after it
+                first_newline = queries_content.find('\n')
+                if first_newline != -1:
+                    queries_content = queries_content[first_newline:].strip()
+            
+            report_content += f"""
+## 🔍 Root Cause Investigation Queries
+
+Use these Loki queries in Grafana for deeper investigation:
+
+{queries_content}
+
+---
+
+"""
+        
         report_content += f"""
 ## 🚨 Critical Issues
 
@@ -775,6 +853,32 @@ Based on the AI analysis above, focus on the recommended actions and long-term i
                 print(f"⚠️  LLM analysis failed: {llm_insights['error']}")
                 print("📝 Generating report without LLM insights...")
                 llm_insights = {"analysis": "LLM analysis unavailable"}
+            
+            # Extract Loki queries from the original report
+            print("🔍 Extracting Loki queries from original report...")
+            # Try different report file patterns
+            base_name = input_file.replace('.json', '')
+            possible_report_files = [
+                f"{base_name}_LOKI_ERROR_ANALYSIS_REPORT.md",
+                f"{base_name}_LOKI_ERROR_ANALYSIS_REPORT_{base_name.upper()}.md",
+                "LOKI_ERROR_ANALYSIS_REPORT.md",
+                "prod_LOKI_ERROR_ANALYSIS_REPORT_PROD.md",
+                "dev_LOKI_ERROR_ANALYSIS_REPORT_DEV.md"
+            ]
+            
+            loki_queries = ""
+            for report_file in possible_report_files:
+                loki_queries = self.extract_loki_queries_from_report(report_file)
+                if loki_queries:
+                    print(f"✅ Found Loki queries in: {report_file}")
+                    break
+            
+            # Add Loki queries to the error patterns for the enhanced report
+            if loki_queries:
+                error_patterns['loki_queries'] = loki_queries
+                print("✅ Loki queries extracted and will be included in enhanced report")
+            else:
+                print("⚠️  No Loki queries found in original report")
             
             print("📝 Generating enhanced report...")
             # Add error_data to patterns for detailed analysis
