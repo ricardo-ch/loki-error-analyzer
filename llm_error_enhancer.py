@@ -722,19 +722,26 @@ class LLMErrorEnhancer:
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}  
 **Enhanced with:** {llm_insights.get('model_used', 'Unknown Model')}
 
-## 🤖 AI-Powered Analysis
+<details>
+<summary><h2>🤖 AI-Powered Analysis</h2></summary>
 
 {llm_insights.get('analysis', 'No LLM analysis available')}
 
+</details>
+
 ---
 
-## 📊 Original Analysis Summary
+<details>
+<summary><h2>📊 Original Analysis Summary</h2></summary>
 
 - **Total Errors:** {original_analysis.get('total_errors', 'N/A')}
 - **Services Affected:** {len(original_analysis.get('service_metrics', {}))}
 - **Critical Errors:** {len(original_analysis.get('critical_errors', []))}
 
-## 🔍 Service Health Overview
+</details>
+
+<details>
+<summary><h2>🔍 Service Health Overview</h2></summary>
 
 """
         
@@ -747,7 +754,7 @@ class LLMErrorEnhancer:
                 reverse=True
             )[:3]
             
-            report_content += "## 🚨 Top 3 Services - Detailed End User Impact Analysis\n\n"
+            report_content += "</details>\n\n<details>\n<summary><h2>🚨 Top 3 Services - Detailed End User Impact Analysis</h2></summary>\n\n"
             
             for i, (service, metrics) in enumerate(sorted_services, 1):
                 # Get error data for this service
@@ -762,14 +769,7 @@ class LLMErrorEnhancer:
                 if i < len(sorted_services):
                     report_content += "\n"
             
-            report_content += "\n## 📊 All Services Overview\n\n"
-            
-            # Add basic service metrics for all services
-            for service, metrics in original_analysis['service_metrics'].items():
-                report_content += f"### {service}\n"
-                report_content += f"- **Total Errors:** {metrics.get('total_errors', 0)}\n"
-                report_content += f"- **Critical Errors:** {metrics.get('critical_errors', 0)}\n"
-                report_content += f"- **Affected Pods:** {metrics.get('unique_pods', 0)}\n\n"
+            report_content += "</details>\n\n"
         
         # Add Loki queries section if available in original analysis
         if 'loki_queries' in original_analysis:
@@ -782,18 +782,21 @@ class LLMErrorEnhancer:
                     queries_content = queries_content[first_newline:].strip()
             
             report_content += f"""
-## 🔍 Root Cause Investigation Queries
+<details>
+<summary><h2>🔍 Root Cause Investigation Queries</h2></summary>
 
 Use these Loki queries in Grafana for deeper investigation:
 
 {queries_content}
 
----
+</details>
 
+---
 """
         
         report_content += f"""
-## 🚨 Critical Issues
+<details>
+<summary><h2>🚨 Critical Issues</h2></summary>
 
 """
         
@@ -805,9 +808,14 @@ Use these Loki queries in Grafana for deeper investigation:
                 report_content += f"   - Time: {error.get('timestamp', 'Unknown')}\n\n"
         
         report_content += f"""
-## 📈 Recommendations
+</details>
+
+<details>
+<summary><h2>📈 Recommendations</h2></summary>
 
 Based on the AI analysis above, focus on the recommended actions and long-term improvements.
+
+</details>
 
 ---
 
