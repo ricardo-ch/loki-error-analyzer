@@ -9,6 +9,8 @@ set -e
 ENVIRONMENT="dev"
 DEBUG=false
 CLEANUP=true
+LIMIT=50000
+TIMEOUT=600
 
 # Function to show usage
 show_usage() {
@@ -18,12 +20,16 @@ show_usage() {
     echo "  -e, --env ENV        Environment to analyze (dev, prod) [default: dev]"
     echo "  -d, --debug          Enable debug mode"
     echo "  -c, --no-cleanup     Disable automatic cleanup"
+    echo "  -l, --limit LIMIT    Maximum number of log entries [default: 50000]"
+    echo "  -t, --timeout SEC    Query timeout in seconds [default: 600]"
     echo "  -h, --help           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                   # Run analysis for dev environment"
-    echo "  $0 -e prod           # Run analysis for prod environment"
-    echo "  $0 -e prod -d        # Run analysis for prod with debug mode"
+    echo "  $0                           # Run analysis for dev environment"
+    echo "  $0 -e prod                   # Run analysis for prod environment"
+    echo "  $0 -e prod -d                # Run analysis for prod with debug mode"
+    echo "  $0 -e prod -l 10000          # Run with 10k limit"
+    echo "  $0 -e prod -l 50000 -t 300   # Run with 50k limit and 5min timeout"
     echo ""
 }
 
@@ -41,6 +47,14 @@ while [[ $# -gt 0 ]]; do
         -c|--no-cleanup)
             CLEANUP=false
             shift
+            ;;
+        -l|--limit)
+            LIMIT="$2"
+            shift 2
+            ;;
+        -t|--timeout)
+            TIMEOUT="$2"
+            shift 2
             ;;
         -h|--help)
             show_usage
@@ -60,12 +74,38 @@ if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
     exit 1
 fi
 
+# Validate limit
+if [[ "$LIMIT" -gt 100000 ]]; then
+    echo "Warning: Limit $LIMIT is very large. This may cause timeouts."
+    echo "Consider using a smaller limit (e.g., 50000) for better performance."
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
+
+# Validate timeout
+if [[ "$TIMEOUT" -lt 60 ]]; then
+    echo "Warning: Timeout $TIMEOUT seconds is very short. This may cause premature timeouts."
+    echo "Consider using a longer timeout (e.g., 300) for better reliability."
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
+
 echo "=========================================="
 echo "Loki Error Analyzer"
 echo "=========================================="
 echo "Environment: $ENVIRONMENT"
 echo "Debug Mode: $DEBUG"
 echo "Auto Cleanup: $CLEANUP"
+echo "Limit: $LIMIT"
+echo "Timeout: ${TIMEOUT}s"
 echo "=========================================="
 
 # Check prerequisites
