@@ -24,6 +24,17 @@ loki:
   # Delay after starting tunnel (seconds)
   tunnel_delay: 3
 
+# Grafana Integration Settings
+grafana:
+  # Base URL for Grafana instance
+  base_url: "https://grafana.ricardo.engineering/explore"
+  
+  # Loki datasource UID in Grafana
+  datasource_uid: "PD805B64DBD608BC9"
+  
+  # Organization ID
+  org_id: 1
+
 # Log Query Settings
 query:
   # Organization ID for logcli

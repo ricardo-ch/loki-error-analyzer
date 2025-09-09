@@ -552,6 +552,216 @@ class LokiErrorAnalyzer:
         
         return tldr
 
+    def generate_loki_queries(self, analysis):
+        """Generate actionable Loki queries for root cause investigation."""
+        if not analysis:
+            return "No analysis data available for query generation."
+        
+        # Get time range for queries
+        time_range = self._get_time_range_for_queries()
+        
+        # Base Grafana URL structure from config
+        base_url = self.config['grafana']['base_url']
+        datasource_uid = self.config['grafana']['datasource_uid']
+        org_id = self.config['grafana']['org_id']
+        
+        queries = []
+        
+        # 1. Top error services investigation
+        if analysis.get('service_metrics'):
+            top_services = sorted(analysis['service_metrics'].items(), 
+                                key=lambda x: x[1]['total_errors'], reverse=True)[:3]
+            
+            queries.append("### 🎯 Top Error Services Investigation")
+            queries.append("")
+            
+            for i, (service, metrics) in enumerate(top_services, 1):
+                # Generate service-specific error query
+                service_query = f'{{stream="stdout", app="{service}"}} |~ "error"'
+                grafana_url = self._build_grafana_url(base_url, datasource_uid, service_query, time_range, org_id)
+                
+                queries.append(f"#### {i}. {service} ({metrics['total_errors']:,} errors)")
+                queries.append(f"**Loki Query:** `{service_query}`")
+                queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                queries.append("")
+                
+                # Add critical errors for this service
+                if metrics.get('critical_errors', 0) > 0:
+                    critical_query = f'{{stream="stdout", app="{service}"}} |~ "(timeout|connection refused|connection failed|eofexception|503|502|500)"'
+                    critical_url = self._build_grafana_url(base_url, datasource_uid, critical_query, time_range, org_id)
+                    
+                    queries.append(f"**Critical Errors Query:** `{critical_query}`")
+                    queries.append(f"**Critical Errors Link:** [Open in Grafana]({critical_url})")
+                    queries.append("")
+        
+        # 2. Critical errors across all services
+        if analysis.get('critical_errors'):
+            queries.append("### 🚨 Critical Errors Investigation")
+            queries.append("")
+            
+            # Group critical errors by type
+            critical_types = {}
+            for error in analysis['critical_errors']:
+                error_type = self._categorize_critical_error(error['message'])
+                if error_type not in critical_types:
+                    critical_types[error_type] = []
+                critical_types[error_type].append(error)
+            
+            for error_type, errors in critical_types.items():
+                if error_type == "timeout":
+                    query = '{stream="stdout"} |~ "timeout"'
+                elif error_type == "connection":
+                    query = '{stream="stdout"} |~ "(connection refused|connection failed)"'
+                elif error_type == "http_5xx":
+                    query = '{stream="stdout"} |~ "(503|502|500)"'
+                elif error_type == "exception":
+                    query = '{stream="stdout"} |~ "eofexception"'
+                else:
+                    query = '{stream="stdout"} |~ "error"'
+                
+                grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
+                
+                queries.append(f"#### {error_type.replace('_', ' ').title()} Errors ({len(errors)} types)")
+                queries.append(f"**Loki Query:** `{query}`")
+                queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                queries.append("")
+        
+        # 3. Error pattern analysis
+        if analysis.get('top_error_messages'):
+            queries.append("### 🔍 Error Pattern Analysis")
+            queries.append("")
+            
+            # Get top error patterns
+            top_patterns = analysis['top_error_messages'][:5]
+            
+            for i, (pattern, count) in enumerate(top_patterns, 1):
+                # Extract key terms from error message for query
+                key_terms = self._extract_key_terms(pattern)
+                if key_terms:
+                    query = f'{{stream="stdout"}} |~ "({"|".join(key_terms)})"'
+                    grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
+                    
+                    queries.append(f"#### {i}. Pattern: {pattern[:50]}{'...' if len(pattern) > 50 else ''} ({count} occurrences)")
+                    queries.append(f"**Loki Query:** `{query}`")
+                    queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                    queries.append("")
+        
+        # 4. Time-based analysis
+        queries.append("### ⏰ Time-based Error Analysis")
+        queries.append("")
+        
+        # Peak error hours
+        if analysis.get('time_errors'):
+            peak_hours = sorted(analysis['time_errors'].items(), key=lambda x: x[1], reverse=True)[:3]
+            
+            for hour, count in peak_hours:
+                # Create time range for specific hour
+                hour_time_range = self._get_hour_specific_time_range(hour)
+                query = '{stream="stdout"} |~ "error"'
+                grafana_url = self._build_grafana_url(base_url, datasource_uid, query, hour_time_range)
+                
+                queries.append(f"#### Peak Error Hour: {hour:02d}:00 ({count} errors)")
+                queries.append(f"**Loki Query:** `{query}`")
+                queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                queries.append("")
+        
+        # 5. Namespace-specific analysis
+        if analysis.get('namespace_errors'):
+            queries.append("### 🏷️ Namespace-specific Analysis")
+            queries.append("")
+            
+            top_namespaces = sorted(analysis['namespace_errors'].items(), 
+                                  key=lambda x: x[1], reverse=True)[:3]
+            
+            for namespace, count in top_namespaces:
+                query = f'{{stream="stdout", namespace="{namespace}"}} |~ "error"'
+                grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
+                
+                queries.append(f"#### {namespace} ({count} errors)")
+                queries.append(f"**Loki Query:** `{query}`")
+                queries.append(f"**Grafana Link:** [Open in Grafana]({grafana_url})")
+                queries.append("")
+        
+        return "\n".join(queries)
+    
+    def _get_time_range_for_queries(self):
+        """Get time range parameters for Grafana queries."""
+        if 'start_date' in self.config['query'] and self.config['query']['start_date']:
+            # Use the same time range as the analysis
+            from_time = self.config['query']['start_date']
+            to_time = self.config['query']['end_date'] if 'end_date' in self.config['query'] else None
+        else:
+            # Default to last 24 hours
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            yesterday = now - timedelta(days=1)
+            from_time = yesterday.strftime('%Y-%m-%dT%H:%M:%SZ')
+            to_time = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        return from_time, to_time
+    
+    def _get_hour_specific_time_range(self, hour):
+        """Get time range for a specific hour."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        target_hour = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if target_hour > now:
+            target_hour = target_hour - timedelta(days=1)
+        
+        start_time = target_hour
+        end_time = target_hour + timedelta(hours=1)
+        
+        return start_time.strftime('%Y-%m-%dT%H:%M:%SZ'), end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    
+    def _build_grafana_url(self, base_url, datasource_uid, query, time_range, org_id=1):
+        """Build Grafana explore URL with query and time range."""
+        from_time, to_time = time_range
+        
+        # Convert time to milliseconds
+        from datetime import datetime
+        from_time_ms = int(datetime.fromisoformat(from_time.replace('Z', '+00:00')).timestamp() * 1000)
+        to_time_ms = int(datetime.fromisoformat(to_time.replace('Z', '+00:00')).timestamp() * 1000)
+        
+        # URL encode the query
+        import urllib.parse
+        encoded_query = urllib.parse.quote(query)
+        
+        # Build the URL structure based on your Grafana URL pattern
+        url = f"{base_url}?schemaVersion=1&panes=%7B%2252i%22:%7B%22datasource%22:%22{datasource_uid}%22,%22queries%22:%5B%7B%22datasource%22:%7B%22type%22:%22loki%22,%22uid%22:%22{datasource_uid}%22%7D,%22editorMode%22:%22code%22,%22expr%22:%22{encoded_query}%22,%22queryType%22:%22range%22,%22refId%22:%22A%22,%22direction%22:%22backward%22%7D%5D,%22range%22:%7B%22from%22:%22{from_time_ms}%22,%22to%22:%22{to_time_ms}%22%7D%7D%7D&orgId={org_id}"
+        
+        return url
+    
+    def _categorize_critical_error(self, message):
+        """Categorize critical error message."""
+        message_lower = message.lower()
+        if 'timeout' in message_lower:
+            return "timeout"
+        elif any(term in message_lower for term in ['connection refused', 'connection failed']):
+            return "connection"
+        elif any(term in message_lower for term in ['503', '502', '500']):
+            return "http_5xx"
+        elif 'eofexception' in message_lower:
+            return "exception"
+        else:
+            return "other"
+    
+    def _extract_key_terms(self, message):
+        """Extract key terms from error message for query building."""
+        # Remove common words and extract meaningful terms
+        import re
+        
+        # Clean up the message
+        cleaned = re.sub(r'[^\w\s]', ' ', message.lower())
+        words = cleaned.split()
+        
+        # Filter out common words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'cannot', 'error', 'exception', 'failed', 'failure'}
+        
+        key_terms = [word for word in words if len(word) > 3 and word not in stop_words]
+        
+        # Return top 3 most relevant terms
+        return key_terms[:3]
+
     def generate_report(self, analysis):
         """Generate markdown report."""
         print("Generating markdown report...")
@@ -565,6 +775,9 @@ class LokiErrorAnalyzer:
         
         # Get filtering thresholds for reporting
         thresholds = self.config['analysis']['thresholds']
+        
+        # Generate Loki queries for root cause analysis
+        loki_queries = self.generate_loki_queries(analysis)
         
         report_content = f"""# {self.config['report']['title']}
 
@@ -591,6 +804,12 @@ This analysis focuses on significant errors and excludes low-frequency issues:
 - **Minimum Critical Error Occurrences:** {thresholds['min_critical_error_occurrences']} (critical errors appearing fewer times are filtered out)
 - **Minimum Service Errors:** {thresholds['min_service_errors']} (services with fewer errors are excluded)
 - **Minimum Service Error Percentage:** {thresholds['min_service_error_percentage']*100:.1f}% (services representing less than this percentage of total errors are excluded)
+
+## 🔍 Root Cause Investigation Queries
+
+Use these Loki queries in Grafana for deeper investigation:
+
+{loki_queries}
 
 ## 🔥 Critical Issues Requiring Immediate Attention
 
