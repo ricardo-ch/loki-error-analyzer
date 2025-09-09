@@ -68,7 +68,7 @@ class LokiErrorAnalyzer:
                 },
                 'query': {
                     'org_id': 'prod-ricardo',
-                    'limit': 500000,
+                    'limit': 50000,
                     'days_back': 1,
                     'start_date': None,  # Will be calculated dynamically
                     'end_date': None     # Will be calculated dynamically
@@ -348,10 +348,12 @@ class LokiErrorAnalyzer:
         
         for i, log_entry in enumerate(self.log_data):
             try:
-                app = log_entry.get('app', 'unknown')
+                # Extract app name from labels
+                labels = log_entry.get('labels', {})
+                app = labels.get('app', 'unknown')
                 service_metrics[app]['total_errors'] += 1
-                service_metrics[app]['unique_pods'].add(log_entry.get('pod', 'unknown'))
-                service_metrics[app]['namespaces'].add(log_entry.get('namespace', 'unknown'))
+                service_metrics[app]['unique_pods'].add(labels.get('pod', 'unknown'))
+                service_metrics[app]['namespaces'].add(labels.get('namespace', 'unknown'))
                 
                 # Categorize error type for this service
                 message = log_entry.get('log_message', '') or ''
@@ -470,11 +472,12 @@ class LokiErrorAnalyzer:
                 # Use a normalized message for counting (first 100 chars to group similar errors)
                 normalized_message = message[:100] if message else 'unknown'
                 critical_error_counts[normalized_message] += 1
+                labels = log_entry.get('labels', {})
                 critical_error_samples[normalized_message].append({
-                    'app': log_entry.get('app', 'unknown'),
+                    'app': labels.get('app', 'unknown'),
                     'message': message,
-                    'pod': log_entry.get('pod', 'unknown'),
-                    'namespace': log_entry.get('namespace', 'unknown'),
+                    'pod': labels.get('pod', 'unknown'),
+                    'namespace': labels.get('namespace', 'unknown'),
                     'timestamp': log_entry.get('timestamp', ''),
                     'source_file': log_entry.get('source_file', '')
                 })
@@ -498,7 +501,8 @@ class LokiErrorAnalyzer:
         # Namespace breakdown
         namespace_errors = defaultdict(int)
         for log_entry in self.log_data:
-            namespace = log_entry.get('namespace', 'unknown')
+            labels = log_entry.get('labels', {})
+            namespace = labels.get('namespace', 'unknown')
             namespace_errors[namespace] += 1
         
         return {

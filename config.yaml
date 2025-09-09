@@ -41,7 +41,7 @@ query:
   org_id: "dev-ricardo"
   
   # Maximum number of log entries to fetch
-  limit: 500000
+  limit: 50000
   
   # Log stream to query
   stream: "stdout"

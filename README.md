@@ -66,6 +66,8 @@ Before running the analyzer, ensure you have the following installed:
 - `-e, --env ENV` - Environment to analyze (dev, prod) [default: dev]
 - `-d, --debug` - Enable debug mode
 - `-c, --no-cleanup` - Disable automatic cleanup
+- `-l, --limit LIMIT` - Maximum number of log entries [default: 50000]
+- `-t, --timeout SEC` - Query timeout in seconds [default: 600]
 - `-h, --help` - Show help message
 
 ### Examples
@@ -82,6 +84,15 @@ Before running the analyzer, ensure you have the following installed:
 
 # Production analysis without cleanup
 ./run_analyzer.sh -e prod -c
+
+# Production analysis with custom limit
+./run_analyzer.sh -e prod -l 10000
+
+# Production analysis with custom timeout
+./run_analyzer.sh -e prod -t 300
+
+# Production analysis with both custom limit and timeout
+./run_analyzer.sh -e prod -l 50000 -t 600
 ```
 
 ### AI-Powered Analysis (Optional)
@@ -135,6 +146,31 @@ The analyzer generates the following files:
 - **💬 Communication Strategies**: User notification and stakeholder communication plans
 - **📊 Executive Summary**: CTO/executive-ready insights and decision support
 
+## Performance & Safety Features
+
+### **Smart Limits & Timeouts**
+The analyzer now includes intelligent safety features to prevent timeouts and performance issues:
+
+- **Default Limit**: 50,000 log entries (reduced from 500,000 for better performance)
+- **Default Timeout**: 600 seconds (10 minutes) for queries
+- **Safety Warnings**: Automatic warnings for large limits or short timeouts
+- **Interactive Confirmation**: Prompts for potentially problematic configurations
+
+### **Recommended Settings**
+
+| Use Case | Limit | Timeout | Command |
+|----------|-------|---------|---------|
+| **Quick Analysis** | 10,000 | 300s | `./run_analyzer.sh -e prod -l 10000 -t 300` |
+| **Standard Analysis** | 50,000 | 600s | `./run_analyzer.sh -e prod` |
+| **Deep Analysis** | 100,000 | 900s | `./run_analyzer.sh -e prod -l 100000 -t 900` |
+| **Emergency Analysis** | 5,000 | 180s | `./run_analyzer.sh -e prod -l 5000 -t 180` |
+
+### **Performance Tips**
+- **Start Small**: Begin with 10k-20k entries to test your setup
+- **Monitor Resources**: Large queries can consume significant memory
+- **Use Time Windows**: Consider shorter time ranges for large datasets
+- **Check kubectl**: Ensure port-forward is stable before large queries
+
 ## Configuration
 
 The `config.yaml` file contains all configuration options:
@@ -143,6 +179,8 @@ The `config.yaml` file contains all configuration options:
 - **Query Parameters**: Time range, log level filters, output limits
 - **Error Categories**: Customizable error classification patterns
 - **Report Settings**: Organization details, report customization options
+- **Error Filtering Thresholds**: Minimum occurrence counts for error inclusion
+- **Grafana Integration**: Clickable query URLs for root cause investigation
 
 ## Troubleshooting
 
@@ -152,6 +190,9 @@ The `config.yaml` file contains all configuration options:
 2. **kubectl not found**: Install kubectl and configure it for your cluster
 3. **logcli not found**: Install logcli from the official documentation
 4. **Permission denied**: Ensure the script has execute permissions: `chmod +x run_analyzer.sh`
+5. **Query timeout**: Increase timeout with `-t` option or reduce limit with `-l` option
+6. **Memory issues**: Reduce limit to 10,000-20,000 entries for large datasets
+7. **Port-forward issues**: Restart kubectl port-forward if connections are unstable
 
 ### Debug Mode
 
@@ -291,11 +332,14 @@ For technical questions or issues, contact the DevOps team.
 
 ### **One-Command Analysis:**
 ```bash
-# Complete analysis with AI enhancement
-python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_log.json
+# Complete analysis with AI enhancement (using shell script)
+./run_analyzer.sh -e prod && python3 llm_error_enhancer.py prod_log.json
 
-# With large model and extended timeout
-python3 loki_error_analyzer.py --env prod && python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
+# Quick analysis with custom limits
+./run_analyzer.sh -e prod -l 10000 -t 300 && python3 llm_error_enhancer.py prod_log.json
+
+# Deep analysis with large model
+./run_analyzer.sh -e prod -l 100000 -t 900 && python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
 ```
 
 ### **Key Benefits:**
