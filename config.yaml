@@ -1,156 +1,111 @@
-# Loki Error Analyzer Configuration
-# This file contains configurable parameters for the analyzer
-
-# Loki Connection Settings
-loki:
-  # Kubernetes context to use
-  context: "platform-chili"
-  
-  # Namespace where Loki is deployed
-  namespace: "observability"
-  
-  # Loki service name
-  service: "loki-read"
-  
-  # Local port for port-forward
-  local_port: 3100
-  
-  # Remote port on the service
-  remote_port: 3100
-  
-  # Timeout for waiting for Loki to be ready (seconds)
-  readiness_timeout: 30
-  
-  # Delay after starting tunnel (seconds)
-  tunnel_delay: 3
-
-# Grafana Integration Settings
-grafana:
-  # Base URL for Grafana instance
-  base_url: "https://grafana.ricardo.engineering/explore"
-  
-  # Loki datasource UID in Grafana
-  datasource_uid: "PD805B64DBD608BC9"
-  
-  # Organization ID
-  org_id: 1
-
-# Log Query Settings
-query:
-  # Organization ID for logcli
-  org_id: "dev-ricardo"
-  
-  # Maximum number of log entries to fetch
-  limit: 50000
-  
-  # Log stream to query
-  stream: "stdout"
-  
-  # Log level filter
-  level: "error"
-  
-  # Date range settings
-  # Number of days to look back from current time
-  days_back: 1
-  
-  # Custom start date (overrides days_back if specified)
-  # Format: "2021-01-19T10:00:00Z"
-  # start_date: "2021-01-19T10:00:00Z"
-  
-  # Custom end date (optional, defaults to now)
-  # Format: "2021-01-20T10:00:00Z"
-  # end_date: "2021-01-20T10:00:00Z"
-  
-  # Output format
-  output_format: "jsonl"
-  
-  # Output file name
-  output_file: "log.json"
-
-# Analysis Settings
 analysis:
-  # Report file name
-  report_file: "LOKI_ERROR_ANALYSIS_REPORT.md"
-  
-  # Number of top issues to identify
-  top_issues_count: 3
-  
-  # Number of top applications to show in breakdown
-  top_apps_count: 3
-  
-  # Enable debug mode
   debug: false
-  
-  # Minimum error thresholds for analysis
+  report_file: LOKI_ERROR_ANALYSIS_REPORT_DEV.md
   thresholds:
-    # Minimum occurrences for an error to be considered significant
-    min_error_occurrences: 10
-    
-    # Minimum occurrences for critical errors to be included
     min_critical_error_occurrences: 10
-    
-    # Minimum total errors for a service to be included in analysis
-    min_service_errors: 10
-    
-    # Minimum percentage of total errors for a service to be considered high-impact
+    min_error_occurrences: 10
     min_service_error_percentage: 0.3
-
-# Error Categories
-# Customize error categorization patterns
-error_categories:
-  network:
-    keywords: ["connection", "timeout", "network", "unreachable", "refused"]
-    name: "Network/Connection Issues"
-  
-  database:
-    keywords: ["database", "sql", "query", "db", "connection refused", "deadlock"]
-    name: "Database Issues"
-  
-  authentication:
-    keywords: ["authentication", "auth", "unauthorized", "forbidden", "invalid token"]
-    name: "Authentication/Authorization Issues"
-  
-  validation:
-    keywords: ["validation", "invalid", "malformed", "bad request", "400"]
-    name: "Data Validation Issues"
-  
-  dependency:
-    keywords: ["dependency", "class not found", "bean", "no such method", "missing"]
-    name: "Dependency/Configuration Issues"
-  
-  memory:
-    keywords: ["memory", "out of memory", "heap", "gc", "oom"]
-    name: "Memory/Resource Issues"
-  
-  api:
-    keywords: ["api", "http", "rest", "endpoint", "404", "500", "502", "503"]
-    name: "API/HTTP Issues"
-  
-  kafka:
-    keywords: ["kafka", "message", "producer", "consumer", "broker"]
-    name: "Message Queue Issues"
-
-# Report Customization
-report:
-  # Company/Organization name
-  organization: "Ricardo Services Infrastructure"
-  
-  # Report title
-  title: "Loki Error Analysis Report"
-  
-  # Include technical details section
-  include_technical_details: true
-  
-  # Include recommendations section
-  include_recommendations: true
-  
-  # Custom footer text
-  footer: "This report is automatically generated from Loki error logs. For technical questions or additional analysis, contact the DevOps team."
-
-# Cleanup Settings
+    min_service_errors: 10
+  top_apps_count: 3
+  top_issues_count: 3
 cleanup:
-  # Automatically cleanup kubectl processes on exit
   auto_cleanup: true
-  
-  # Graceful shutdown timeout (seconds)
   shutdown_timeout: 10
+error_categories:
+  api:
+    keywords:
+    - api
+    - http
+    - rest
+    - endpoint
+    - '404'
+    - '500'
+    - '502'
+    - '503'
+    name: API/HTTP Issues
+  authentication:
+    keywords:
+    - authentication
+    - auth
+    - unauthorized
+    - forbidden
+    - invalid token
+    name: Authentication/Authorization Issues
+  database:
+    keywords:
+    - database
+    - sql
+    - query
+    - db
+    - connection refused
+    - deadlock
+    name: Database Issues
+  dependency:
+    keywords:
+    - dependency
+    - class not found
+    - bean
+    - no such method
+    - missing
+    name: Dependency/Configuration Issues
+  kafka:
+    keywords:
+    - kafka
+    - message
+    - producer
+    - consumer
+    - broker
+    name: Message Queue Issues
+  memory:
+    keywords:
+    - memory
+    - out of memory
+    - heap
+    - gc
+    - oom
+    name: Memory/Resource Issues
+  network:
+    keywords:
+    - connection
+    - timeout
+    - network
+    - unreachable
+    - refused
+    name: Network/Connection Issues
+  validation:
+    keywords:
+    - validation
+    - invalid
+    - malformed
+    - bad request
+    - '400'
+    name: Data Validation Issues
+grafana:
+  base_url: https://grafana.ricardo.engineering/explore
+  datasource_uid: PD805B64DBD608BC9
+  org_id: 1
+loki:
+  context: platform-chili
+  local_port: 3100
+  namespace: observability
+  readiness_timeout: 30
+  remote_port: 3100
+  service: loki-read
+  tunnel_delay: 3
+query:
+  days_back: 1
+  end_date: null
+  level: error
+  limit: 50000
+  org_id: dev-ricardo
+  output_file: log.json
+  output_format: jsonl
+  start_date: null
+  stream: stdout
+report:
+  footer: This report is automatically generated from Loki error logs. For technical
+    questions or additional analysis, contact the DevOps team.
+  include_recommendations: true
+  include_technical_details: true
+  organization: Ricardo Services Infrastructure
+  title: Loki Error Analysis Report

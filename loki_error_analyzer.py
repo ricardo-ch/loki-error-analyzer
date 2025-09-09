@@ -23,6 +23,7 @@ class LokiErrorAnalyzer:
         self.config = self.load_config(config_file)
         self.kubectl_process = None
         self.log_data = []
+        self.actual_time_range = None  # Store the actual time range used by logcli
         
     def load_config(self, config_file):
         """Load configuration from YAML file and apply environment-specific settings."""
@@ -186,6 +187,9 @@ class LokiErrorAnalyzer:
     def fetch_logs(self):
         """Fetch logs from Loki using logcli."""
         print("Fetching logs from Loki...")
+        
+        # Calculate and store the actual time range that will be used
+        self._calculate_actual_time_range()
         
         # Build logcli command
         cmd = [
@@ -581,7 +585,7 @@ class LokiErrorAnalyzer:
             
             for i, (service, metrics) in enumerate(top_services, 1):
                 # Generate service-specific error query
-                service_query = f'{{stream="stdout", app="{service}"}} |~ "error"'
+                service_query = f'{{stream="stdout", app="{service}"}} |= "error"'
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, service_query, time_range, org_id)
                 
                 # Generate both URL formats
@@ -628,7 +632,7 @@ class LokiErrorAnalyzer:
                 elif error_type == "exception":
                     query = '{stream="stdout"} |~ "eofexception"'
                 else:
-                    query = '{stream="stdout"} |~ "error"'
+                    query = '{stream="stdout"} |= "error"'
                 
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
                 
@@ -668,7 +672,7 @@ class LokiErrorAnalyzer:
             for hour, count in peak_hours:
                 # Create time range for specific hour
                 hour_time_range = self._get_hour_specific_time_range(hour)
-                query = '{stream="stdout"} |~ "error"'
+                query = '{stream="stdout"} |= "error"'
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, hour_time_range)
                 
                 queries.append(f"#### Peak Error Hour: {hour:02d}:00 ({count} errors)")
@@ -685,7 +689,7 @@ class LokiErrorAnalyzer:
                                   key=lambda x: x[1], reverse=True)[:3]
             
             for namespace, count in top_namespaces:
-                query = f'{{stream="stdout", namespace="{namespace}"}} |~ "error"'
+                query = f'{{stream="stdout", namespace="{namespace}"}} |= "error"'
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
                 
                 queries.append(f"#### {namespace} ({count} errors)")
@@ -695,21 +699,36 @@ class LokiErrorAnalyzer:
         
         return "\n".join(queries)
     
-    def _get_time_range_for_queries(self):
-        """Get time range parameters for Grafana queries."""
+    def _calculate_actual_time_range(self):
+        """Calculate the actual time range that logcli will use."""
         if 'start_date' in self.config['query'] and self.config['query']['start_date']:
-            # Use the same time range as the analysis
+            # Use the same time range as the analysis (absolute dates)
             from_time = self.config['query']['start_date']
             to_time = self.config['query']['end_date'] if 'end_date' in self.config['query'] else None
         else:
-            # Default to last 24 hours
+            # Match logcli --since behavior exactly
             from datetime import datetime, timedelta
             now = datetime.now()
-            yesterday = now - timedelta(days=1)
-            from_time = yesterday.strftime('%Y-%m-%dT%H:%M:%SZ')
+            # Calculate the same time range that logcli --since=24h would use
+            days_back = self.config['query'].get('days_back', 1)
+            hours_back = days_back * 24
+            start_time = now - timedelta(hours=hours_back)
+            
+            from_time = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             to_time = now.strftime('%Y-%m-%dT%H:%M:%SZ')
         
-        return from_time, to_time
+        # Store the actual time range used
+        self.actual_time_range = (from_time, to_time)
+        print(f"Using time range: {from_time} to {to_time}")
+
+    def _get_time_range_for_queries(self):
+        """Get time range parameters for Grafana queries - uses the actual time range from logcli."""
+        if self.actual_time_range:
+            return self.actual_time_range
+        else:
+            # Fallback to calculation if not set
+            self._calculate_actual_time_range()
+            return self.actual_time_range
     
     def _get_hour_specific_time_range(self, hour):
         """Get time range for a specific hour."""
@@ -728,29 +747,33 @@ class LokiErrorAnalyzer:
         """Build Grafana explore URL with query and time range."""
         from_time, to_time = time_range
         
-        # Convert time to milliseconds
-        from datetime import datetime
-        from_time_ms = int(datetime.fromisoformat(from_time.replace('Z', '+00:00')).timestamp() * 1000)
-        to_time_ms = int(datetime.fromisoformat(to_time.replace('Z', '+00:00')).timestamp() * 1000)
+        # Convert time to milliseconds (keep UTC timezone)
+        from datetime import datetime, timezone
+        from_time_dt = datetime.fromisoformat(from_time.replace('Z', '+00:00'))
+        to_time_dt = datetime.fromisoformat(to_time.replace('Z', '+00:00'))
         
-        # Build the JSON structure for the URL
+        # Convert to milliseconds (timestamp() already handles timezone correctly)
+        from_time_ms = int(from_time_dt.timestamp() * 1000)
+        to_time_ms = int(to_time_dt.timestamp() * 1000)
+        
+        # Build the JSON structure for the URL (matching the working format)
         import json
         import urllib.parse
         
-        # Create the query structure
+        # Create the query structure matching the working URL format
         query_structure = {
-            "52i": {
+            "lgj": {
                 "datasource": datasource_uid,
                 "queries": [
                     {
+                        "refId": "A",
+                        "expr": query + "\n",  # Add newline at the end
+                        "queryType": "range",
                         "datasource": {
                             "type": "loki",
                             "uid": datasource_uid
                         },
                         "editorMode": "code",
-                        "expr": query,
-                        "queryType": "range",
-                        "refId": "A",
                         "direction": "backward"
                     }
                 ],
@@ -774,17 +797,51 @@ class LokiErrorAnalyzer:
         """Build a simpler Grafana URL as fallback."""
         from_time, to_time = time_range
         
-        # Convert time to milliseconds
-        from datetime import datetime
-        from_time_ms = int(datetime.fromisoformat(from_time.replace('Z', '+00:00')).timestamp() * 1000)
-        to_time_ms = int(datetime.fromisoformat(to_time.replace('Z', '+00:00')).timestamp() * 1000)
+        # Convert time to milliseconds (keep UTC timezone)
+        from datetime import datetime, timezone
+        from_time_dt = datetime.fromisoformat(from_time.replace('Z', '+00:00'))
+        to_time_dt = datetime.fromisoformat(to_time.replace('Z', '+00:00'))
+        
+        # Convert to milliseconds (timestamp() already handles timezone correctly)
+        from_time_ms = int(from_time_dt.timestamp() * 1000)
+        to_time_ms = int(to_time_dt.timestamp() * 1000)
         
         # URL encode the query
         import urllib.parse
         encoded_query = urllib.parse.quote(query)
         
-        # Simple URL format
-        simple_url = f"{base_url}?datasource={datasource_uid}&query={encoded_query}&from={from_time_ms}&to={to_time_ms}&orgId={org_id}"
+        # Use the same working format but with a different pane ID for simple URLs
+        import json
+        
+        query_structure = {
+            "simple": {
+                "datasource": datasource_uid,
+                "queries": [
+                    {
+                        "refId": "A",
+                        "expr": query + "\n",
+                        "queryType": "range",
+                        "datasource": {
+                            "type": "loki",
+                            "uid": datasource_uid
+                        },
+                        "editorMode": "code",
+                        "direction": "backward"
+                    }
+                ],
+                "range": {
+                    "from": str(from_time_ms),
+                    "to": str(to_time_ms)
+                }
+            }
+        }
+        
+        # Convert to JSON and URL encode
+        query_json = json.dumps(query_structure)
+        encoded_panes = urllib.parse.quote(query_json)
+        
+        # Build the final URL using the same format as complex URLs
+        simple_url = f"{base_url}?schemaVersion=1&panes={encoded_panes}&orgId={org_id}"
         
         return simple_url
     

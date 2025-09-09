@@ -67,7 +67,7 @@ Before running the analyzer, ensure you have the following installed:
 - `-d, --debug` - Enable debug mode
 - `-c, --no-cleanup` - Disable automatic cleanup
 - `-l, --limit LIMIT` - Maximum number of log entries [default: 50000]
-- `-t, --timeout SEC` - Query timeout in seconds [default: 600]
+- `-t, --timeout SEC` - Query timeout validation (for safety warnings) [default: 600]
 - `-h, --help` - Show help message
 
 ### Examples
@@ -152,7 +152,7 @@ The analyzer generates the following files:
 The analyzer now includes intelligent safety features to prevent timeouts and performance issues:
 
 - **Default Limit**: 50,000 log entries (reduced from 500,000 for better performance)
-- **Default Timeout**: 600 seconds (10 minutes) for queries
+- **Default Timeout**: 600 seconds (10 minutes) for safety validation
 - **Safety Warnings**: Automatic warnings for large limits or short timeouts
 - **Interactive Confirmation**: Prompts for potentially problematic configurations
 

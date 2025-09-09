@@ -266,8 +266,8 @@ echo "Configuration updated successfully!"
 echo "Starting Loki Error Analyzer..."
 echo ""
 
-# Run the Python script
-python3 loki_error_analyzer.py
+# Run the Python script with parameters
+python3 loki_error_analyzer.py --env "$ENVIRONMENT" --limit "$LIMIT"
 
 # Check exit status
 if [[ $? -eq 0 ]]; then
@@ -281,13 +281,19 @@ if [[ $? -eq 0 ]]; then
     ls -la *.md *.json 2>/dev/null || echo "No markdown or JSON files found"
     
     # Show report content if it exists
-    if [[ -f "LOKI_ERROR_ANALYSIS_REPORT_${ENVIRONMENT^^}.md" ]]; then
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+        REPORT_FILE="LOKI_ERROR_ANALYSIS_REPORT_PROD.md"
+    else
+        REPORT_FILE="LOKI_ERROR_ANALYSIS_REPORT_DEV.md"
+    fi
+    
+    if [[ -f "$REPORT_FILE" ]]; then
         echo ""
         echo "Report preview:"
         echo "----------------------------------------"
-        head -20 "LOKI_ERROR_ANALYSIS_REPORT_${ENVIRONMENT^^}.md"
+        head -20 "$REPORT_FILE"
         echo "----------------------------------------"
-        echo "Full report: LOKI_ERROR_ANALYSIS_REPORT_${ENVIRONMENT^^}.md"
+        echo "Full report: $REPORT_FILE"
     fi
     
 else
