@@ -385,13 +385,31 @@ class LokiErrorAnalyzer:
                 print(f"Error processing log entry {i}: {e}")
                 continue
         
-        # Convert sets to counts for JSON serialization
-        for service in service_metrics:
-            service_metrics[service]['unique_pods'] = len(service_metrics[service]['unique_pods'])
-            service_metrics[service]['namespaces'] = list(service_metrics[service]['namespaces'])
-            service_metrics[service]['top_errors'] = service_metrics[service]['top_errors'].most_common(5)
-            # Convert error_types defaultdict to regular dict
-            service_metrics[service]['error_types'] = dict(service_metrics[service]['error_types'])
+        # Convert sets to counts for JSON serialization and filter low-impact services
+        min_service_threshold = self.config['analysis']['thresholds']['min_service_errors']
+        filtered_service_metrics = {}
+        filtered_services = []
+        
+        for service, metrics in service_metrics.items():
+            # Only include services that meet the minimum error threshold
+            if metrics['total_errors'] >= min_service_threshold:
+                metrics['unique_pods'] = len(metrics['unique_pods'])
+                metrics['namespaces'] = list(metrics['namespaces'])
+                metrics['top_errors'] = metrics['top_errors'].most_common(5)
+                # Convert error_types defaultdict to regular dict
+                metrics['error_types'] = dict(metrics['error_types'])
+                filtered_service_metrics[service] = metrics
+            else:
+                filtered_services.append((service, metrics['total_errors']))
+        
+        # Update service_metrics to use filtered results
+        service_metrics = filtered_service_metrics
+        
+        if self.config['analysis']['debug']:
+            print(f"Filtered out {len(filtered_services)} services with low error counts (threshold: {min_service_threshold})")
+            if filtered_services:
+                print("Filtered services:", [f"{service}({count})" for service, count in filtered_services[:5]])
+            print(f"Kept {len(service_metrics)} services that meet error threshold")
         
         # Time analysis
         time_errors = defaultdict(int)
@@ -404,8 +422,10 @@ class LokiErrorAnalyzer:
                 except:
                     continue
         
-        # Top error messages across all services
+        # Top error messages across all services (filtered by frequency)
         error_messages = Counter()
+        min_error_threshold = self.config['analysis']['thresholds']['min_error_occurrences']
+        
         for log_entry in self.log_data:
             message = log_entry.get('log_message', '') or ''
             # Handle case where message might be a dict
@@ -414,8 +434,25 @@ class LokiErrorAnalyzer:
             if message and len(message.strip()) > 0:
                 error_messages[message] += 1
         
-        # Critical errors analysis
+        # Filter out errors that don't meet the minimum threshold
+        filtered_error_messages = Counter()
+        filtered_out_errors = 0
+        for message, count in error_messages.items():
+            if count >= min_error_threshold:
+                filtered_error_messages[message] = count
+            else:
+                filtered_out_errors += count
+        
+        if self.config['analysis']['debug']:
+            print(f"Filtered out {filtered_out_errors} low-frequency errors (threshold: {min_error_threshold})")
+            print(f"Kept {sum(filtered_error_messages.values())} errors that meet frequency threshold")
+        
+        # Critical errors analysis with frequency filtering
         critical_errors = []
+        critical_error_counts = defaultdict(int)
+        critical_error_samples = defaultdict(list)
+        
+        # First pass: count critical errors by message
         for log_entry in self.log_data:
             message = log_entry.get('log_message', '') or ''
             stack_trace = log_entry.get('stack_trace', '') or ''
@@ -430,7 +467,10 @@ class LokiErrorAnalyzer:
             
             critical_keywords = ['timeout', 'connection refused', 'connection failed', 'eofexception', '503', '502', '500']
             if any(keyword in combined_text for keyword in critical_keywords):
-                critical_errors.append({
+                # Use a normalized message for counting (first 100 chars to group similar errors)
+                normalized_message = message[:100] if message else 'unknown'
+                critical_error_counts[normalized_message] += 1
+                critical_error_samples[normalized_message].append({
                     'app': log_entry.get('app', 'unknown'),
                     'message': message,
                     'pod': log_entry.get('pod', 'unknown'),
@@ -438,6 +478,22 @@ class LokiErrorAnalyzer:
                     'timestamp': log_entry.get('timestamp', ''),
                     'source_file': log_entry.get('source_file', '')
                 })
+        
+        # Second pass: only include critical errors that meet the minimum threshold
+        min_critical_threshold = self.config['analysis']['thresholds']['min_critical_error_occurrences']
+        filtered_out_critical = 0
+        for normalized_message, count in critical_error_counts.items():
+            if count >= min_critical_threshold:
+                # Take the most recent sample for each error type
+                sample = critical_error_samples[normalized_message][0]
+                sample['occurrence_count'] = count
+                critical_errors.append(sample)
+            else:
+                filtered_out_critical += count
+        
+        if self.config['analysis']['debug']:
+            print(f"Filtered out {filtered_out_critical} low-frequency critical errors (threshold: {min_critical_threshold})")
+            print(f"Kept {len(critical_errors)} critical error types that meet frequency threshold")
         
         # Namespace breakdown
         namespace_errors = defaultdict(int)
@@ -450,7 +506,7 @@ class LokiErrorAnalyzer:
             'error_categories': error_categories,
             'service_metrics': dict(service_metrics),
             'time_errors': time_errors,
-            'top_error_messages': error_messages.most_common(10),
+            'top_error_messages': filtered_error_messages.most_common(10),
             'critical_errors': critical_errors[:20],  # Top 20 critical errors
             'namespace_errors': dict(namespace_errors)
         }
@@ -507,6 +563,9 @@ class LokiErrorAnalyzer:
         # Generate TLDR for CTO
         tldr = self.generate_tldr(analysis)
         
+        # Get filtering thresholds for reporting
+        thresholds = self.config['analysis']['thresholds']
+        
         report_content = f"""# {self.config['report']['title']}
 
 **Organization:** {self.config['report']['organization']}  
@@ -525,6 +584,14 @@ class LokiErrorAnalyzer:
 - **Services Affected:** {len(analysis['service_metrics'])} services
 - **Namespaces Affected:** {len(analysis['namespace_errors'])} namespaces
 
+## 🔍 Analysis Filtering Applied
+
+This analysis focuses on significant errors and excludes low-frequency issues:
+- **Minimum Error Occurrences:** {thresholds['min_error_occurrences']} (errors appearing fewer times are filtered out)
+- **Minimum Critical Error Occurrences:** {thresholds['min_critical_error_occurrences']} (critical errors appearing fewer times are filtered out)
+- **Minimum Service Errors:** {thresholds['min_service_errors']} (services with fewer errors are excluded)
+- **Minimum Service Error Percentage:** {thresholds['min_service_error_percentage']*100:.1f}% (services representing less than this percentage of total errors are excluded)
+
 ## 🔥 Critical Issues Requiring Immediate Attention
 
 """
@@ -533,10 +600,12 @@ class LokiErrorAnalyzer:
         if analysis['critical_errors']:
             report_content += "### Most Critical Errors (Timeouts, Connection Failures, 5xx)\n\n"
             for i, error in enumerate(analysis['critical_errors'][:10], 1):
+                occurrence_count = error.get('occurrence_count', 1)
                 report_content += f"{i}. **{error['app']}** - {error['message'][:80]}{'...' if len(error['message']) > 80 else ''}\n"
                 report_content += f"   - Pod: `{error['pod']}`\n"
                 report_content += f"   - Namespace: `{error['namespace']}`\n"
                 report_content += f"   - Time: {error['timestamp']}\n"
+                report_content += f"   - Occurrences: {occurrence_count}\n"
                 if error['source_file']:
                     report_content += f"   - Source: `{error['source_file']}`\n"
                 report_content += "\n"
