@@ -1,6 +1,6 @@
 analysis:
   debug: false
-  report_file: LOKI_ERROR_ANALYSIS_REPORT_PROD.md
+  report_file: LOKI_ERROR_ANALYSIS_REPORT_DEV.md
   thresholds:
     min_critical_error_occurrences: 10
     min_error_occurrences: 10
@@ -95,15 +95,15 @@ loki:
   tunnel_delay: 3
 query:
   days_back: 1
-  end_date: '2025-09-09T22:00:00Z'
+  end_date: null
   exclude_containers:
   - istio-proxy
-  level: all
+  level: error
   limit: 50000
-  org_id: prod-ricardo
+  org_id: dev-ricardo
   output_file: log.json
   output_format: jsonl
-  start_date: '2025-09-09T19:00:00Z'
+  start_date: null
   stream: stdout
 report:
   footer: This report is automatically generated from Loki error logs. For technical

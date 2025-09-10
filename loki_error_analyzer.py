@@ -215,20 +215,25 @@ class LokiErrorAnalyzer:
         if 'end_date' in self.config['query'] and self.config['query']['end_date']:
             cmd.extend(['--to', self.config['query']['end_date']])
         
-        # Add query - use proper LogQL syntax with container exclusion
-        exclude_containers = self.config["query"].get("exclude_containers", [])
-        container_filter = ""
-        if exclude_containers:
-            # Build container exclusion filter: container!~"istio-proxy"
-            container_exclusions = "|".join(exclude_containers)
-            container_filter = f', container!~"{container_exclusions}"'
-        
-        if self.config["query"]["level"] == "all":
-            # For 'all' log levels, don't filter by level but exclude containers
-            cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}}')
+        # Add query - use custom LogQL if provided, otherwise use default logic
+        if 'custom_logql' in self.config["query"]:
+            # Use custom LogQL query
+            cmd.append(self.config["query"]["custom_logql"])
         else:
-            # Filter by specific log level and exclude containers
-            cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}} |~ "{self.config["query"]["level"]}"')
+            # Use default query logic with proper LogQL syntax and container exclusion
+            exclude_containers = self.config["query"].get("exclude_containers", [])
+            container_filter = ""
+            if exclude_containers:
+                # Build container exclusion filter: container!~"istio-proxy"
+                container_exclusions = "|".join(exclude_containers)
+                container_filter = f', container!~"{container_exclusions}"'
+            
+            if self.config["query"]["level"] == "all":
+                # For 'all' log levels, don't filter by level but exclude containers
+                cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}}')
+            else:
+                # Filter by specific log level and exclude containers
+                cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}} |~ "{self.config["query"]["level"]}"')
         
         try:
             print(f"Executing: {' '.join(cmd)}")
@@ -1212,6 +1217,7 @@ Examples:
   python3 loki_error_analyzer.py --env prod --days 3 --limit 200000
   python3 loki_error_analyzer.py --env prod --time-range 7pm-10pm-yesterday
   python3 loki_error_analyzer.py --env prod --start-time "2024-01-15T19:00:00Z" --end-time "2024-01-15T22:00:00Z"
+  python3 loki_error_analyzer.py --loki-query "orgId=loki-tutti-prod" --loki-query-params '{"namespace":"live-tutti-services","detected_level":"info"}'
         """
     )
     
@@ -1271,6 +1277,16 @@ Examples:
         help='Input JSON file to analyze instead of fetching from Loki'
     )
     
+    parser.add_argument(
+        '--loki-query',
+        help='Custom Loki query to execute. When provided, overrides default query configuration. Example: --loki-query "orgId=loki-tutti-prod" --loki-query-params \'{"namespace":"live-tutti-services","detected_level":"!info"}\''
+    )
+    
+    parser.add_argument(
+        '--loki-query-params',
+        help='JSON string containing query parameters for custom Loki query. Example: \'{"namespace":"live-tutti-services","detected_level":"!info"}\''
+    )
+    
     args = parser.parse_args()
     
     # Set up signal handlers
@@ -1316,6 +1332,40 @@ Examples:
             analyzer.config['query']['start_date'] = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             analyzer.config['query']['end_date'] = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             print(f"Applied time range: {start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')} UTC")
+    
+    # Handle custom Loki query
+    if args.loki_query:
+        try:
+            # Parse the orgId from the query string
+            if 'orgId=' in args.loki_query:
+                org_id = args.loki_query.split('orgId=')[1].split()[0]
+                analyzer.config['query']['org_id'] = org_id
+                print(f"Overriding org_id to {org_id}")
+            
+            # Parse query parameters if provided
+            if args.loki_query_params:
+                import json
+                query_params = json.loads(args.loki_query_params)
+                
+                # Build the LogQL query from parameters
+                if 'namespace' in query_params and 'detected_level' in query_params:
+                    namespace = query_params['namespace']
+                    detected_level = query_params['detected_level']
+                    
+                    # Build the LogQL query: {namespace="live-tutti-services"} | detected_level!="info"
+                    logql_query = f'{{namespace="{namespace}"}} | detected_level!="{detected_level}"'
+                    
+                    # Store the custom query for use in fetch_logs
+                    analyzer.config['query']['custom_logql'] = logql_query
+                    print(f"Custom LogQL query: {logql_query}")
+                else:
+                    print("Warning: Both 'namespace' and 'detected_level' are required in query parameters")
+            else:
+                print("Warning: --loki-query-params is required when using --loki-query")
+                
+        except Exception as e:
+            print(f"Error parsing custom Loki query: {e}")
+            sys.exit(1)
     
     print(f"Starting analysis for {args.env.upper()} environment...")
     

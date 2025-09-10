@@ -12,6 +12,8 @@ CLEANUP=true
 LIMIT=50000
 TIMEOUT=600
 LOG_LEVEL="error"
+LOKI_QUERY=""
+LOKI_QUERY_PARAMS=""
 
 # Function to show usage
 show_usage() {
@@ -24,6 +26,8 @@ show_usage() {
     echo "  -l, --limit LIMIT    Maximum number of log entries [default: 50000]"
     echo "  -t, --timeout SEC    Query timeout in seconds [default: 600]"
     echo "  --log-level LEVEL    Log level filter (error, warn, info, debug, all) [default: error]"
+    echo "  --loki-query QUERY   Custom Loki query (e.g., 'orgId=loki-tutti-prod')"
+    echo "  --loki-query-params  JSON parameters for custom query"
     echo "  -h, --help           Show this help message"
     echo ""
     echo "Examples:"
@@ -34,6 +38,7 @@ show_usage() {
     echo "  $0 -e prod -l 50000 -t 300   # Run with 50k limit and 5min timeout"
     echo "  $0 -e prod --log-level all   # Get all log levels (not just errors)"
     echo "  $0 -e dev --log-level warn   # Get warnings and errors only"
+    echo "  $0 --loki-query 'orgId=loki-tutti-prod' --loki-query-params '{\"namespace\":\"live-tutti-services\",\"detected_level\":\"info\"}'"
     echo ""
 }
 
@@ -62,6 +67,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --log-level)
             LOG_LEVEL="$2"
+            shift 2
+            ;;
+        --loki-query)
+            LOKI_QUERY="$2"
+            shift 2
+            ;;
+        --loki-query-params)
+            LOKI_QUERY_PARAMS="$2"
             shift 2
             ;;
         -h|--help)
@@ -305,8 +318,20 @@ echo "Configuration updated successfully!"
 echo "Starting Loki Error Analyzer..."
 echo ""
 
+# Build command with parameters
+CMD_ARGS=("--env" "$ENVIRONMENT" "--limit" "$LIMIT")
+
+# Add custom Loki query arguments if provided
+if [[ -n "$LOKI_QUERY" ]]; then
+    CMD_ARGS+=("--loki-query" "$LOKI_QUERY")
+fi
+
+if [[ -n "$LOKI_QUERY_PARAMS" ]]; then
+    CMD_ARGS+=("--loki-query-params" "$LOKI_QUERY_PARAMS")
+fi
+
 # Run the Python script with parameters
-python3 loki_error_analyzer.py --env "$ENVIRONMENT" --limit "$LIMIT"
+python3 loki_error_analyzer.py "${CMD_ARGS[@]}"
 
 # Check exit status
 if [[ $? -eq 0 ]]; then
