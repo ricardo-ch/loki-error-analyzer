@@ -88,6 +88,7 @@ loki:
   context: platform-chili
   local_port: 3100
   namespace: observability
+  query_timeout: 30m
   readiness_timeout: 30
   remote_port: 3100
   service: loki-read
@@ -97,7 +98,7 @@ query:
   end_date: null
   exclude_containers:
   - istio-proxy
-  level: error
+  level: all
   limit: 50000
   org_id: dev-ricardo
   output_file: log.json

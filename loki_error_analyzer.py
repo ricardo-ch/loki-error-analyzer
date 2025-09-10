@@ -188,6 +188,13 @@ class LokiErrorAnalyzer:
         """Fetch logs from Loki using logcli."""
         print("Fetching logs from Loki...")
         
+        # Warn about "all" log level
+        if self.config["query"]["level"] == "all":
+            print("⚠️  WARNING: Using 'all' log levels will fetch significantly more data.")
+            print("   This may take longer and consume more resources.")
+            print("   Consider using a smaller limit or shorter time range.")
+            print("")
+        
         # Calculate and store the actual time range that will be used
         self._calculate_actual_time_range()
         
@@ -199,7 +206,8 @@ class LokiErrorAnalyzer:
             f'--org-id={self.config["query"]["org_id"]}',
             f'--limit={self.config["query"]["limit"]}',
             f'--output={self.config["query"]["output_format"]}',
-            f'--since={self.config["query"]["days_back"] * 24}h'
+            f'--since={self.config["query"]["days_back"] * 24}h',
+            f'--timeout={self.config["loki"].get("query_timeout", "30m")}'  # Use configurable timeout
         ]
         
         # Add custom date range if specified
