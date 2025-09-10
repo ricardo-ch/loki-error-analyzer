@@ -206,8 +206,7 @@ class LokiErrorAnalyzer:
             f'--org-id={self.config["query"]["org_id"]}',
             f'--limit={self.config["query"]["limit"]}',
             f'--output={self.config["query"]["output_format"]}',
-            f'--since={self.config["query"]["days_back"] * 24}h',
-            f'--timeout={self.config["loki"].get("query_timeout", "30m")}'  # Use configurable timeout
+            f'--since={self.config["query"]["days_back"] * 24}h'
         ]
         
         # Add custom date range if specified
@@ -233,7 +232,19 @@ class LokiErrorAnalyzer:
         
         try:
             print(f"Executing: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            # Parse timeout from config (e.g., "30m" -> 1800 seconds)
+            timeout_str = self.config["loki"].get("query_timeout", "30m")
+            if timeout_str.endswith('m'):
+                timeout_seconds = int(timeout_str[:-1]) * 60
+            elif timeout_str.endswith('h'):
+                timeout_seconds = int(timeout_str[:-1]) * 3600
+            else:
+                timeout_seconds = int(timeout_str)
+            
+            print(f"Using timeout: {timeout_seconds} seconds ({timeout_str})")
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout_seconds)
             
             # Save raw logs with environment-specific filename
             output_file = f"{self.environment}_{self.config['query']['output_file']}"
@@ -245,6 +256,19 @@ class LokiErrorAnalyzer:
             # Parse logs
             self.parse_logs(result.stdout)
             
+        except subprocess.TimeoutExpired as e:
+            print(f"Query timed out after {timeout_seconds} seconds ({timeout_str})")
+            print("This usually happens when:")
+            print("  - Querying too much data (try reducing --limit)")
+            print("  - Using 'all' log levels (try specific levels like 'error' or 'warn')")
+            print("  - Network issues or Loki server overload")
+            print("  - Very large time ranges")
+            print("")
+            print("Suggestions:")
+            print("  - Try: ./run_analyzer.sh --log-level error -l 10000 -t 600")
+            print("  - Or: ./run_analyzer.sh --log-level warn -l 20000 -t 900")
+            print("  - Or: ./run_analyzer.sh --log-level all -l 5000 -t 1200")
+            sys.exit(1)
         except subprocess.CalledProcessError as e:
             print(f"Error fetching logs: {e}")
             print(f"stderr: {e.stderr}")
