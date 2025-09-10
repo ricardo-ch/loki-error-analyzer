@@ -11,6 +11,7 @@ DEBUG=false
 CLEANUP=true
 LIMIT=50000
 TIMEOUT=600
+LOG_LEVEL="error"
 
 # Function to show usage
 show_usage() {
@@ -22,6 +23,7 @@ show_usage() {
     echo "  -c, --no-cleanup     Disable automatic cleanup"
     echo "  -l, --limit LIMIT    Maximum number of log entries [default: 50000]"
     echo "  -t, --timeout SEC    Query timeout in seconds [default: 600]"
+    echo "  --log-level LEVEL    Log level filter (error, warn, info, debug, all) [default: error]"
     echo "  -h, --help           Show this help message"
     echo ""
     echo "Examples:"
@@ -30,6 +32,8 @@ show_usage() {
     echo "  $0 -e prod -d                # Run analysis for prod with debug mode"
     echo "  $0 -e prod -l 10000          # Run with 10k limit"
     echo "  $0 -e prod -l 50000 -t 300   # Run with 50k limit and 5min timeout"
+    echo "  $0 -e prod --log-level all   # Get all log levels (not just errors)"
+    echo "  $0 -e dev --log-level warn   # Get warnings and errors only"
     echo ""
 }
 
@@ -56,6 +60,10 @@ while [[ $# -gt 0 ]]; do
             TIMEOUT="$2"
             shift 2
             ;;
+        --log-level)
+            LOG_LEVEL="$2"
+            shift 2
+            ;;
         -h|--help)
             show_usage
             exit 0
@@ -71,6 +79,12 @@ done
 # Validate environment
 if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
     echo "Error: Environment must be 'dev' or 'prod'"
+    exit 1
+fi
+
+# Validate log level
+if [[ "$LOG_LEVEL" != "error" && "$LOG_LEVEL" != "warn" && "$LOG_LEVEL" != "info" && "$LOG_LEVEL" != "debug" && "$LOG_LEVEL" != "all" ]]; then
+    echo "Error: Log level must be one of: error, warn, info, debug, all"
     exit 1
 fi
 
@@ -106,6 +120,7 @@ echo "Debug Mode: $DEBUG"
 echo "Auto Cleanup: $CLEANUP"
 echo "Limit: $LIMIT"
 echo "Timeout: ${TIMEOUT}s"
+echo "Log Level: $LOG_LEVEL"
 echo "=========================================="
 
 # Check prerequisites
@@ -259,6 +274,30 @@ with open('config.yaml', 'w') as f:
 print('Automatic cleanup disabled')
 "
 fi
+
+# Set log level
+echo "Setting log level to: $LOG_LEVEL"
+python3 -c "
+import yaml
+
+# Load config
+with open('config.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+# Set log level based on command line argument
+if '$LOG_LEVEL' == 'all':
+    # For 'all', we need to modify the query to not filter by level
+    # This will be handled in the Python script by modifying the query
+    config['query']['level'] = 'all'
+else:
+    config['query']['level'] = '$LOG_LEVEL'
+
+# Save updated config
+with open('config.yaml', 'w') as f:
+    yaml.dump(config, f, default_flow_style=False)
+
+print('Log level set to: $LOG_LEVEL')
+"
 
 echo "Configuration updated successfully!"
 

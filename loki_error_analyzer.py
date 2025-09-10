@@ -209,7 +209,12 @@ class LokiErrorAnalyzer:
             cmd.extend(['--to', self.config['query']['end_date']])
         
         # Add query - use proper LogQL syntax
-        cmd.append(f'{{stream="{self.config["query"]["stream"]}"}} |~ "{self.config["query"]["level"]}"')
+        if self.config["query"]["level"] == "all":
+            # For 'all' log levels, don't filter by level
+            cmd.append(f'{{stream="{self.config["query"]["stream"]}"}}')
+        else:
+            # Filter by specific log level
+            cmd.append(f'{{stream="{self.config["query"]["stream"]}"}} |~ "{self.config["query"]["level"]}"')
         
         try:
             print(f"Executing: {' '.join(cmd)}")
@@ -1044,7 +1049,10 @@ Use these Loki queries in Grafana for deeper investigation:
         if self.config['report']['include_technical_details']:
             report_content += "## 🔧 Technical Details\n\n"
             report_content += f"- **Loki Endpoint:** http://localhost:{self.config['loki']['local_port']}\n"
-            report_content += f"- **Query:** {self.config['query']['stream']} |~ \"{self.config['query']['level']}\"\n"
+            if self.config["query"]["level"] == "all":
+                report_content += f"- **Query:** {self.config['query']['stream']} (all log levels)\n"
+            else:
+                report_content += f"- **Query:** {self.config['query']['stream']} |~ \"{self.config['query']['level']}\"\n"
             report_content += f"- **Limit:** {self.config['query']['limit']:,} entries\n"
             report_content += f"- **Output Format:** {self.config['query']['output_format']}\n\n"
         
