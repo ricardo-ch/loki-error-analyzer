@@ -208,13 +208,20 @@ class LokiErrorAnalyzer:
         if 'end_date' in self.config['query'] and self.config['query']['end_date']:
             cmd.extend(['--to', self.config['query']['end_date']])
         
-        # Add query - use proper LogQL syntax
+        # Add query - use proper LogQL syntax with container exclusion
+        exclude_containers = self.config["query"].get("exclude_containers", [])
+        container_filter = ""
+        if exclude_containers:
+            # Build container exclusion filter: container!~"istio-proxy"
+            container_exclusions = "|".join(exclude_containers)
+            container_filter = f', container!~"{container_exclusions}"'
+        
         if self.config["query"]["level"] == "all":
-            # For 'all' log levels, don't filter by level
-            cmd.append(f'{{stream="{self.config["query"]["stream"]}"}}')
+            # For 'all' log levels, don't filter by level but exclude containers
+            cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}}')
         else:
-            # Filter by specific log level
-            cmd.append(f'{{stream="{self.config["query"]["stream"]}"}} |~ "{self.config["query"]["level"]}"')
+            # Filter by specific log level and exclude containers
+            cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}} |~ "{self.config["query"]["level"]}"')
         
         try:
             print(f"Executing: {' '.join(cmd)}")
@@ -565,6 +572,21 @@ class LokiErrorAnalyzer:
         
         return tldr
 
+    def _build_query_with_exclusions(self, base_query, additional_filters=""):
+        """Build a LogQL query with container exclusions and additional filters."""
+        exclude_containers = self.config["query"].get("exclude_containers", [])
+        container_filter = ""
+        if exclude_containers:
+            # Build container exclusion filter: container!~"istio-proxy"
+            container_exclusions = "|".join(exclude_containers)
+            container_filter = f', container!~"{container_exclusions}"'
+        
+        # Combine base query with container exclusions and additional filters
+        if additional_filters:
+            return f'{base_query}{container_filter}}} {additional_filters}'
+        else:
+            return f'{base_query}{container_filter}}}'
+
     def generate_loki_queries(self, analysis):
         """Generate actionable Loki queries for root cause investigation."""
         if not analysis:
@@ -590,7 +612,7 @@ class LokiErrorAnalyzer:
             
             for i, (service, metrics) in enumerate(top_services, 1):
                 # Generate service-specific error query
-                service_query = f'{{stream="stdout", app="{service}"}} |= "error"'
+                service_query = self._build_query_with_exclusions(f'{{stream="stdout", app="{service}"', '|= "error"')
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, service_query, time_range, org_id)
                 
                 # Generate both URL formats
@@ -604,7 +626,7 @@ class LokiErrorAnalyzer:
                 
                 # Add critical errors for this service
                 if metrics.get('critical_errors', 0) > 0:
-                    critical_query = f'{{stream="stdout", app="{service}"}} |~ "(timeout|connection refused|connection failed|eofexception|503|502|500)"'
+                    critical_query = self._build_query_with_exclusions(f'{{stream="stdout", app="{service}"', '|~ "(timeout|connection refused|connection failed|eofexception|503|502|500)"')
                     critical_url = self._build_grafana_url(base_url, datasource_uid, critical_query, time_range, org_id)
                     
                     critical_simple_url = self._build_simple_grafana_url(base_url, datasource_uid, critical_query, time_range, org_id)
@@ -629,15 +651,15 @@ class LokiErrorAnalyzer:
             
             for error_type, errors in critical_types.items():
                 if error_type == "timeout":
-                    query = '{stream="stdout"} |~ "timeout"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', '|~ "timeout"')
                 elif error_type == "connection":
-                    query = '{stream="stdout"} |~ "(connection refused|connection failed)"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', '|~ "(connection refused|connection failed)"')
                 elif error_type == "http_5xx":
-                    query = '{stream="stdout"} |~ "(503|502|500)"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', '|~ "(503|502|500)"')
                 elif error_type == "exception":
-                    query = '{stream="stdout"} |~ "eofexception"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', '|~ "eofexception"')
                 else:
-                    query = '{stream="stdout"} |= "error"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', '|= "error"')
                 
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
                 
@@ -658,7 +680,7 @@ class LokiErrorAnalyzer:
                 # Extract key terms from error message for query
                 key_terms = self._extract_key_terms(pattern)
                 if key_terms:
-                    query = f'{{stream="stdout"}} |~ "({"|".join(key_terms)})"'
+                    query = self._build_query_with_exclusions('{stream="stdout"', f'|~ "({"|".join(key_terms)})"')
                     grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
                     
                     queries.append(f"#### {i}. Pattern: {pattern[:50]}{'...' if len(pattern) > 50 else ''} ({count} occurrences)")
@@ -677,7 +699,7 @@ class LokiErrorAnalyzer:
             for hour, count in peak_hours:
                 # Create time range for specific hour
                 hour_time_range = self._get_hour_specific_time_range(hour)
-                query = '{stream="stdout"} |= "error"'
+                query = self._build_query_with_exclusions('{stream="stdout"', '|= "error"')
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, hour_time_range)
                 
                 queries.append(f"#### Peak Error Hour: {hour:02d}:00 ({count} errors)")
@@ -694,7 +716,7 @@ class LokiErrorAnalyzer:
                                   key=lambda x: x[1], reverse=True)[:3]
             
             for namespace, count in top_namespaces:
-                query = f'{{stream="stdout", namespace="{namespace}"}} |= "error"'
+                query = self._build_query_with_exclusions(f'{{stream="stdout", namespace="{namespace}"', '|= "error"')
                 grafana_url = self._build_grafana_url(base_url, datasource_uid, query, time_range, org_id)
                 
                 queries.append(f"#### {namespace} ({count} errors)")
@@ -1049,10 +1071,18 @@ Use these Loki queries in Grafana for deeper investigation:
         if self.config['report']['include_technical_details']:
             report_content += "## 🔧 Technical Details\n\n"
             report_content += f"- **Loki Endpoint:** http://localhost:{self.config['loki']['local_port']}\n"
+            
+            # Build the actual query that was used
+            exclude_containers = self.config["query"].get("exclude_containers", [])
+            container_filter = ""
+            if exclude_containers:
+                container_exclusions = "|".join(exclude_containers)
+                container_filter = f', container!~"{container_exclusions}"'
+            
             if self.config["query"]["level"] == "all":
-                report_content += f"- **Query:** {self.config['query']['stream']} (all log levels)\n"
+                report_content += f"- **Query:** {self.config['query']['stream']}{container_filter} (all log levels, excluding: {', '.join(exclude_containers)})\n"
             else:
-                report_content += f"- **Query:** {self.config['query']['stream']} |~ \"{self.config['query']['level']}\"\n"
+                report_content += f"- **Query:** {self.config['query']['stream']}{container_filter} |~ \"{self.config['query']['level']}\" (excluding: {', '.join(exclude_containers)})\n"
             report_content += f"- **Limit:** {self.config['query']['limit']:,} entries\n"
             report_content += f"- **Output Format:** {self.config['query']['output_format']}\n\n"
         
