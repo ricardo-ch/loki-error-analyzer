@@ -98,7 +98,7 @@ query:
   end_date: '2025-09-09T22:00:00Z'
   exclude_containers:
   - istio-proxy
-  level: warn
+  level: all
   limit: 50000
   org_id: prod-ricardo
   output_file: log.json
