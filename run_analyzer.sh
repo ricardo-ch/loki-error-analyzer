@@ -9,7 +9,6 @@ set -e
 ENVIRONMENT="dev"
 DEBUG=false
 CLEANUP=true
-LIMIT=50000
 TIMEOUT=600
 LOG_LEVEL="error"
 LOKI_QUERY=""
@@ -23,7 +22,6 @@ show_usage() {
     echo "  -e, --env ENV        Environment to analyze (dev, prod) [default: dev]"
     echo "  -d, --debug          Enable debug mode"
     echo "  -c, --no-cleanup     Disable automatic cleanup"
-    echo "  -l, --limit LIMIT    Maximum number of log entries [default: 50000]"
     echo "  -t, --timeout SEC    Query timeout in seconds [default: 600]"
     echo "  --log-level LEVEL    Log level filter (error, warn, info, debug, all) [default: error]"
     echo "  --loki-query QUERY   Custom Loki query (e.g., 'orgId=loki-tutti-prod')"
@@ -34,8 +32,7 @@ show_usage() {
     echo "  $0                           # Run analysis for dev environment"
     echo "  $0 -e prod                   # Run analysis for prod environment"
     echo "  $0 -e prod -d                # Run analysis for prod with debug mode"
-    echo "  $0 -e prod -l 10000          # Run with 10k limit"
-    echo "  $0 -e prod -l 50000 -t 300   # Run with 50k limit and 5min timeout"
+    echo "  $0 -e prod -t 300            # Run with 5min timeout"
     echo "  $0 -e prod --log-level all   # Get all log levels (not just errors)"
     echo "  $0 -e dev --log-level warn   # Get warnings and errors only"
     echo "  $0 --loki-query 'orgId=loki-tutti-prod' --loki-query-params '{\"namespace\":\"live-tutti-services\",\"detected_level\":\"info\"}'"
@@ -56,10 +53,6 @@ while [[ $# -gt 0 ]]; do
         -c|--no-cleanup)
             CLEANUP=false
             shift
-            ;;
-        -l|--limit)
-            LIMIT="$2"
-            shift 2
             ;;
         -t|--timeout)
             TIMEOUT="$2"
@@ -101,17 +94,6 @@ if [[ "$LOG_LEVEL" != "error" && "$LOG_LEVEL" != "warn" && "$LOG_LEVEL" != "info
     exit 1
 fi
 
-# Validate limit
-if [[ "$LIMIT" -gt 100000 ]]; then
-    echo "Warning: Limit $LIMIT is very large. This may cause timeouts."
-    echo "Consider using a smaller limit (e.g., 50000) for better performance."
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborted."
-        exit 1
-    fi
-fi
 
 # Validate timeout
 if [[ "$TIMEOUT" -lt 60 ]]; then
@@ -131,7 +113,6 @@ echo "=========================================="
 echo "Environment: $ENVIRONMENT"
 echo "Debug Mode: $DEBUG"
 echo "Auto Cleanup: $CLEANUP"
-echo "Limit: $LIMIT"
 echo "Timeout: ${TIMEOUT}s"
 echo "Log Level: $LOG_LEVEL"
 echo "=========================================="
@@ -319,7 +300,7 @@ echo "Starting Loki Error Analyzer..."
 echo ""
 
 # Build command with parameters
-CMD_ARGS=("--env" "$ENVIRONMENT" "--limit" "$LIMIT")
+CMD_ARGS=("--env" "$ENVIRONMENT")
 
 # Add custom Loki query arguments if provided
 if [[ -n "$LOKI_QUERY" ]]; then
@@ -331,6 +312,7 @@ if [[ -n "$LOKI_QUERY_PARAMS" ]]; then
 fi
 
 # Run the Python script with parameters
+echo "Running: python3 loki_error_analyzer.py ${CMD_ARGS[*]}"
 python3 loki_error_analyzer.py "${CMD_ARGS[@]}"
 
 # Check exit status

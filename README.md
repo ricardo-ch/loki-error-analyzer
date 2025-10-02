@@ -66,8 +66,10 @@ Before running the analyzer, ensure you have the following installed:
 - `-e, --env ENV` - Environment to analyze (dev, prod) [default: dev]
 - `-d, --debug` - Enable debug mode
 - `-c, --no-cleanup` - Disable automatic cleanup
-- `-l, --limit LIMIT` - Maximum number of log entries [default: 50000]
 - `-t, --timeout SEC` - Query timeout validation (for safety warnings) [default: 600]
+- `--log-level LEVEL` - Log level filter (error, warn, info, debug, all) [default: error]
+- `--loki-query QUERY` - Custom Loki query (e.g., 'orgId=loki-tutti-prod')
+- `--loki-query-params` - JSON parameters for custom query
 - `-h, --help` - Show help message
 
 ### Examples
@@ -85,14 +87,17 @@ Before running the analyzer, ensure you have the following installed:
 # Production analysis without cleanup
 ./run_analyzer.sh -e prod -c
 
-# Production analysis with custom limit
-./run_analyzer.sh -e prod -l 10000
-
 # Production analysis with custom timeout
 ./run_analyzer.sh -e prod -t 300
 
-# Production analysis with both custom limit and timeout
-./run_analyzer.sh -e prod -l 50000 -t 600
+# Production analysis with all log levels (not just errors)
+./run_analyzer.sh -e prod --log-level all
+
+# Production analysis with warnings and errors only
+./run_analyzer.sh -e prod --log-level warn
+
+# Production analysis with custom Loki query
+./run_analyzer.sh -e prod --loki-query 'orgId=loki-tutti-prod' --loki-query-params '{"namespace":"live-tutti-services","detected_level":"info"}'
 ```
 
 ### AI-Powered Analysis (Optional)
@@ -148,25 +153,23 @@ The analyzer generates the following files:
 
 ## Performance & Safety Features
 
-### **Smart Limits & Timeouts**
-The analyzer now includes intelligent safety features to prevent timeouts and performance issues:
+### **Smart Timeouts**
+The analyzer includes intelligent safety features to prevent timeouts:
 
-- **Default Limit**: 50,000 log entries (reduced from 500,000 for better performance)
 - **Default Timeout**: 600 seconds (10 minutes) for safety validation
-- **Safety Warnings**: Automatic warnings for large limits or short timeouts
+- **Safety Warnings**: Automatic warnings for short timeouts
 - **Interactive Confirmation**: Prompts for potentially problematic configurations
 
 ### **Recommended Settings**
 
-| Use Case | Limit | Timeout | Command |
-|----------|-------|---------|---------|
-| **Quick Analysis** | 10,000 | 300s | `./run_analyzer.sh -e prod -l 10000 -t 300` |
-| **Standard Analysis** | 50,000 | 600s | `./run_analyzer.sh -e prod` |
-| **Deep Analysis** | 100,000 | 900s | `./run_analyzer.sh -e prod -l 100000 -t 900` |
-| **Emergency Analysis** | 5,000 | 180s | `./run_analyzer.sh -e prod -l 5000 -t 180` |
+| Use Case | Timeout | Command |
+|----------|---------|---------|
+| **Quick Analysis** | 300s | `./run_analyzer.sh -e prod -t 300` |
+| **Standard Analysis** | 600s | `./run_analyzer.sh -e prod` |
+| **Deep Analysis** | 900s | `./run_analyzer.sh -e prod -t 900` |
+| **Emergency Analysis** | 180s | `./run_analyzer.sh -e prod -t 180` |
 
 ### **Performance Tips**
-- **Start Small**: Begin with 10k-20k entries to test your setup
 - **Monitor Resources**: Large queries can consume significant memory
 - **Use Time Windows**: Consider shorter time ranges for large datasets
 - **Check kubectl**: Ensure port-forward is stable before large queries
@@ -190,8 +193,8 @@ The `config.yaml` file contains all configuration options:
 2. **kubectl not found**: Install kubectl and configure it for your cluster
 3. **logcli not found**: Install logcli from the official documentation
 4. **Permission denied**: Ensure the script has execute permissions: `chmod +x run_analyzer.sh`
-5. **Query timeout**: Increase timeout with `-t` option or reduce limit with `-l` option
-6. **Memory issues**: Reduce limit to 10,000-20,000 entries for large datasets
+5. **Query timeout**: Increase timeout with `-t` option
+6. **Memory issues**: Consider using shorter time ranges for large datasets
 7. **Port-forward issues**: Restart kubectl port-forward if connections are unstable
 
 ### Debug Mode
@@ -335,11 +338,11 @@ For technical questions or issues, contact the DevOps team.
 # Complete analysis with AI enhancement (using shell script)
 ./run_analyzer.sh -e prod && python3 llm_error_enhancer.py prod_log.json
 
-# Quick analysis with custom limits
-./run_analyzer.sh -e prod -l 10000 -t 300 && python3 llm_error_enhancer.py prod_log.json
+# Quick analysis with custom timeout
+./run_analyzer.sh -e prod -t 300 && python3 llm_error_enhancer.py prod_log.json
 
 # Deep analysis with large model
-./run_analyzer.sh -e prod -l 100000 -t 900 && python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
+./run_analyzer.sh -e prod -t 900 && python3 llm_error_enhancer.py prod_log.json --model llama3.1:70b-instruct-q4_K_M --timeout 600
 ```
 
 ### **Key Benefits:**

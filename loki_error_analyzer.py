@@ -185,7 +185,7 @@ class LokiErrorAnalyzer:
                 print(f"Error cleaning up port-forward: {e}")
     
     def fetch_logs(self):
-        """Fetch logs from Loki using logcli."""
+        """Fetch logs from Loki using logcli with automatic batching for large queries."""
         print("Fetching logs from Loki...")
         
         # Warn about "all" log level
@@ -198,89 +198,154 @@ class LokiErrorAnalyzer:
         # Calculate and store the actual time range that will be used
         self._calculate_actual_time_range()
         
-        # Build logcli command
-        cmd = [
-            'logcli',
-            'query',
-            f'--addr=http://localhost:{self.config["loki"]["local_port"]}',
-            f'--org-id={self.config["query"]["org_id"]}',
-            f'--limit={self.config["query"]["limit"]}',
-            f'--output={self.config["query"]["output_format"]}',
-            f'--since={self.config["query"]["days_back"] * 24}h'
-        ]
+        # Try to fetch logs with batching if needed
+        self._fetch_logs_with_batching()
+    
+    def _fetch_logs_with_batching(self):
+        """Fetch logs with automatic batching when queries are too large."""
+        from datetime import datetime, timedelta
         
-        # Add custom date range if specified
+        # Get time range
         if 'start_date' in self.config['query'] and self.config['query']['start_date']:
-            cmd.extend(['--from', self.config['query']['start_date']])
-        if 'end_date' in self.config['query'] and self.config['query']['end_date']:
-            cmd.extend(['--to', self.config['query']['end_date']])
-        
-        # Add query - use custom LogQL if provided, otherwise use default logic
-        if 'custom_logql' in self.config["query"]:
-            # Use custom LogQL query
-            cmd.append(self.config["query"]["custom_logql"])
+            start_time = datetime.fromisoformat(self.config['query']['start_date'].replace('Z', '+00:00'))
+            end_time = datetime.fromisoformat(self.config['query']['end_date'].replace('Z', '+00:00'))
         else:
-            # Use default query logic with proper LogQL syntax and container exclusion
-            exclude_containers = self.config["query"].get("exclude_containers", [])
-            container_filter = ""
-            if exclude_containers:
-                # Build container exclusion filter: container!~"istio-proxy"
-                container_exclusions = "|".join(exclude_containers)
-                container_filter = f', container!~"{container_exclusions}"'
-            
-            if self.config["query"]["level"] == "all":
-                # For 'all' log levels, don't filter by level but exclude containers
-                cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}}')
-            else:
-                # Filter by specific log level and exclude containers
-                cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}} |~ "{self.config["query"]["level"]}"')
+            # Calculate from days_back
+            now = datetime.now()
+            days_back = self.config['query'].get('days_back', 1)
+            end_time = now
+            start_time = now - timedelta(days=days_back)
         
-        try:
-            print(f"Executing: {' '.join(cmd)}")
+        # Calculate total time span
+        total_span = end_time - start_time
+        print(f"Total time span: {total_span}")
+        
+        # Start with a reasonable batch size (6 hours)
+        batch_hours = 6
+        max_retries = 3
+        
+        all_logs = []
+        current_start = start_time
+        
+        while current_start < end_time:
+            current_end = min(current_start + timedelta(hours=batch_hours), end_time)
             
-            # Parse timeout from config (e.g., "30m" -> 1800 seconds)
-            timeout_str = self.config["loki"].get("query_timeout", "30m")
-            if timeout_str.endswith('m'):
-                timeout_seconds = int(timeout_str[:-1]) * 60
-            elif timeout_str.endswith('h'):
-                timeout_seconds = int(timeout_str[:-1]) * 3600
+            print(f"Fetching batch: {current_start.strftime('%Y-%m-%d %H:%M:%S')} to {current_end.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            batch_logs = self._fetch_single_batch(current_start, current_end, batch_hours, max_retries)
+            if batch_logs:
+                all_logs.extend(batch_logs)
+                print(f"  ✓ Fetched {len(batch_logs)} log entries")
             else:
-                timeout_seconds = int(timeout_str)
+                print(f"  ⚠ No logs in this batch")
             
-            print(f"Using timeout: {timeout_seconds} seconds ({timeout_str})")
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout_seconds)
-            
-            # Save raw logs with environment-specific filename
-            output_file = f"{self.environment}_{self.config['query']['output_file']}"
-            with open(output_file, 'w') as f:
-                f.write(result.stdout)
-            
-            print(f"Logs saved to {output_file}")
-            
-            # Parse logs
-            self.parse_logs(result.stdout)
-            
-        except subprocess.TimeoutExpired as e:
-            print(f"Query timed out after {timeout_seconds} seconds ({timeout_str})")
-            print("This usually happens when:")
-            print("  - Querying too much data (try reducing --limit)")
-            print("  - Using 'all' log levels (try specific levels like 'error' or 'warn')")
-            print("  - Network issues or Loki server overload")
-            print("  - Very large time ranges")
-            print("")
-            print("Suggestions:")
-            print("  - Try: ./run_analyzer.sh --log-level error -l 10000 -t 600")
-            print("  - Or: ./run_analyzer.sh --log-level warn -l 20000 -t 900")
-            print("  - Or: ./run_analyzer.sh --log-level all -l 5000 -t 1200")
-            sys.exit(1)
-        except subprocess.CalledProcessError as e:
-            print(f"Error fetching logs: {e}")
-            print(f"stderr: {e.stderr}")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            sys.exit(1)
+            current_start = current_end
+        
+        # Save all logs to file
+        output_file = f"{self.environment}_{self.config['query']['output_file']}"
+        with open(output_file, 'w') as f:
+            for log_entry in all_logs:
+                f.write(log_entry + '\n')
+        
+        print(f"Total logs saved to {output_file}: {len(all_logs)} entries")
+        
+        # Parse logs
+        self.parse_logs('\n'.join(all_logs))
+    
+    def _fetch_single_batch(self, start_time, end_time, batch_hours, max_retries):
+        """Fetch a single batch of logs, with automatic retry and batch size reduction."""
+        from datetime import datetime, timedelta
+        
+        current_batch_hours = batch_hours
+        
+        for attempt in range(max_retries):
+            try:
+                # Build logcli command for this batch
+                cmd = [
+                    'logcli',
+                    'query',
+                    f'--addr=http://localhost:{self.config["loki"]["local_port"]}',
+                    f'--org-id={self.config["query"]["org_id"]}',
+                    f'--limit={self.config["query"]["limit"]}',
+                    f'--output={self.config["query"]["output_format"]}',
+                    '--from', start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    '--to', end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                ]
+                
+                # Add query - use custom LogQL if provided, otherwise use default logic
+                if 'custom_logql' in self.config["query"]:
+                    cmd.append(self.config["query"]["custom_logql"])
+                else:
+                    # Use default query logic with proper LogQL syntax and container exclusion
+                    exclude_containers = self.config["query"].get("exclude_containers", [])
+                    container_filter = ""
+                    if exclude_containers:
+                        container_exclusions = "|".join(exclude_containers)
+                        container_filter = f', container!~"{container_exclusions}"'
+                    
+                    if self.config["query"]["level"] == "all":
+                        cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}}')
+                    else:
+                        cmd.append(f'{{stream="{self.config["query"]["stream"]}"{container_filter}}} |~ "{self.config["query"]["level"]}"')
+                
+                print(f"  Attempt {attempt + 1}: {' '.join(cmd)}")
+                
+                # Parse timeout from config
+                timeout_str = self.config["loki"].get("query_timeout", "30m")
+                if timeout_str.endswith('m'):
+                    timeout_seconds = int(timeout_str[:-1]) * 60
+                elif timeout_str.endswith('h'):
+                    timeout_seconds = int(timeout_str[:-1]) * 3600
+                else:
+                    timeout_seconds = int(timeout_str)
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=timeout_seconds)
+                
+                # Parse the logs
+                logs = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        logs.append(line)
+                
+                return logs
+                
+            except subprocess.CalledProcessError as e:
+                stderr = e.stderr.lower()
+                
+                # Check if it's a size limit error
+                if "too many bytes" in stderr or "query would read" in stderr:
+                    print(f"  ⚠ Query too large (attempt {attempt + 1}), reducing batch size...")
+                    current_batch_hours = max(1, current_batch_hours // 2)  # Halve the batch size
+                    
+                    # Recalculate end time for smaller batch
+                    end_time = min(start_time + timedelta(hours=current_batch_hours), end_time)
+                    
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        print(f"  ❌ Failed to fetch batch even with smallest size")
+                        return []
+                else:
+                    print(f"  ❌ Error fetching batch: {e}")
+                    print(f"  stderr: {e.stderr}")
+                    return []
+                    
+            except subprocess.TimeoutExpired:
+                print(f"  ⚠ Query timed out (attempt {attempt + 1}), reducing batch size...")
+                current_batch_hours = max(1, current_batch_hours // 2)
+                end_time = min(start_time + timedelta(hours=current_batch_hours), end_time)
+                
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    print(f"  ❌ Batch timed out even with smallest size")
+                    return []
+                    
+            except Exception as e:
+                print(f"  ❌ Unexpected error: {e}")
+                return []
+        
+        return []
     
     def parse_logs(self, log_content):
         """Parse log content and extract error information."""
